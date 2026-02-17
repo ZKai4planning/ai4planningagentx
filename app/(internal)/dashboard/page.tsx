@@ -12,6 +12,7 @@ import {
   Clock,
 } from "lucide-react"
 
+
 /* ================= TYPES ================= */
 
 type FlowStatus = "ON_TRACK" | "NEEDS_ACTION" | "BLOCKED"
@@ -121,6 +122,8 @@ export default function DashboardPage() {
                   </div>
 
                 </div>
+{/* Floating WhatsApp Support */}
+{/* <WhatsAppFloatingButton phoneNumber="919876543210" /> */}
 
                 {/* ACTION REQUIRED */}
                 {customer.actionRequired && (
@@ -141,7 +144,7 @@ export default function DashboardPage() {
           <div className="xl:sticky xl:top-8 space-y-6">
 
             {/* QUICK ACTIONS */}
-            <div className="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-800 p-6 text-white shadow-lg">
+            {/* <div className="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-800 p-6 text-white shadow-lg">
               <h2 className="text-base font-semibold">
                 Quick Actions
               </h2>
@@ -151,7 +154,7 @@ export default function DashboardPage() {
                 <ActionButton label="Generate Quote" />
                 <ActionButton label="Schedule Consultation" />
               </div>
-            </div>
+            </div> */}
 
             {/* OVERALL PROGRESS */}
             <div className="rounded-3xl bg-white border p-6 shadow-sm">

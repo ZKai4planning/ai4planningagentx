@@ -9,8 +9,11 @@ import {
   StickyNote,
   LogOut,
 } from "lucide-react"
+import { IconType } from "react-icons/lib"
 
-export const SIDEBAR_ITEMS = [
+
+ 
+export const sidebaritem = [
   {
     id: "dashboard",
     label: "Dashboard",

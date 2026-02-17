@@ -22,9 +22,9 @@ import {
 const assignedAgentY = "Agent Y – Planning Team A"
 
 const customer = {
-  name: "Alex Johnson",
-  phone: "+44 7400 123456",
-  email: "alex.johnson@email.com",
+  name: "zaferkhan",
+  phone: "+44 7768 62279",
+  email: "zafer.khan@ai4planning.com",
   location: "London, UK",
   status: "Active",
 }
@@ -34,7 +34,7 @@ const flow = {
   steps: [
     { label: "Profile Created",           desc: "Account set up" },
     { label: "Service Selected",          desc: "HSPC chosen" },
-    { label: "£30 Advance Payment",       desc: "paid" },
+    { label: "30% Advance Payment",       desc: "£2,970 paid" },
     { label: "Eligibility Check",         desc: "Passed" },
     { label: "Consultant Assigned",       desc: "In progress" },
     { label: "Quote Submitted",           desc: "Awaiting sign-off" },
@@ -53,7 +53,7 @@ const project = {
 }
 
 const requirements = {
-  propertyType: "Semi-Detached House",
+  propertyType: "Terraced house",
   locationType: "Residential",
   timeline: "4–6 Months",
   scope: [
@@ -484,7 +484,7 @@ export default function UserDetailsPage() {
             </Section>
 
             {/* DOCUMENTS */}
-           {/* <Section title="Project Documents" icon={<FileText size={15} />}>
+           <Section title="Project Documents" icon={<FileText size={15} />}>
   <div className="space-y-2">
     {documents.map((doc) => (
       <div
@@ -495,7 +495,7 @@ export default function UserDetailsPage() {
           hover:bg-white hover:shadow-sm transition-all
         "
       >
-       
+        {/* LEFT: FILE INFO */}
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -521,7 +521,7 @@ export default function UserDetailsPage() {
           </div>
         </div>
 
-        
+        {/* RIGHT: ACTIONS */}
         <div className="flex items-center gap-3 sm:gap-2 sm:justify-end">
           <button
             className="
@@ -550,7 +550,7 @@ export default function UserDetailsPage() {
       </div>
     ))}
   </div>
-</Section> */}
+</Section>
 
 
             {/* CLIENT COMMUNICATION

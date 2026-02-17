@@ -6,7 +6,7 @@ import { Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 /* ================= TYPES ================= */
 
 export type Column<T> = {
-  key: keyof T | "sno" | "actions"
+  key: keyof T | "sno" | "actions"|"favourite"
   label: string
   align?: "left" | "center" | "right"
   width?: string

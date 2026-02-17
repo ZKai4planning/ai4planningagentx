@@ -1,0 +1,147 @@
+import {
+  Building2,
+  FileCheck,
+  Ruler,
+  Shield,
+  Video,
+  FileText,
+  Banknote,
+  File,
+  MessageSquare,
+  User,
+  StickyNote,
+} from "lucide-react"
+
+/* ─────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────── */
+
+export type SectionId =
+  | "requirements"
+  | "quote"
+  | "documents"
+  | "communication"
+  | "profile"
+  | "payments"
+  | "notes"
+  | "project"
+  | "submission"
+  | "dimensions"
+  | "constraints"
+  | "consultation"
+
+interface NavSection {
+  id: SectionId
+  label: string
+  icon: React.ReactNode
+}
+
+export const NAV_SECTIONS: NavSection[] = [
+  { id: "project", label: "Project Overview", icon: <Building2 size={16} /> },
+  { id: "submission", label: "Form Submission", icon: <FileCheck size={16} /> },
+  { id: "dimensions", label: "Dimensions", icon: <Ruler size={16} /> },
+  { id: "constraints", label: "Constraints", icon: <Shield size={16} /> },
+  { id: "consultation", label: "Consultation", icon: <Video size={16} /> },
+  { id: "requirements", label: "Requirements", icon: <FileText size={16} /> },
+  { id: "quote", label: "Quote Summary", icon: <Banknote size={16} /> },
+  { id: "documents", label: "Documents", icon: <File size={16} /> },
+  { id: "communication", label: "Communication", icon: <MessageSquare size={16} /> },
+  { id: "profile", label: "Profile", icon: <User size={16} /> },
+  { id: "payments", label: "Payments", icon: <Banknote size={16} /> },
+  { id: "notes", label: "Notes", icon: <StickyNote size={16} /> },
+]
+
+/* ─────────────────────────────────────────────
+   SIDEBAR NAVIGATION COMPONENT
+───────────────────────────────────────────── */
+
+interface SidebarNavigationProps {
+  activeSection: SectionId
+  onSectionChange: (section: SectionId) => void
+  documentCount?: number
+  messageCount?: number
+  noteCount?: number
+  consultationTime?: string
+  consultationBooked?: boolean
+}
+
+export default function SidebarNavigation({
+  activeSection,
+  onSectionChange,
+  documentCount = 0,
+  messageCount = 0,
+  noteCount = 0,
+  consultationTime,
+  consultationBooked = false,
+}: SidebarNavigationProps) {
+  return (
+    <div className="lg:sticky lg:top-5 h-fit">
+      <div className="bg-white rounded-2xl border shadow-sm p-4 flex flex-col">
+        {/* HEADER */}
+        <div className="mb-3">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            Sections
+          </p>
+        </div>
+
+        {/* NAV */}
+        <nav className="space-y-1 flex-1">
+          {NAV_SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              onClick={() => onSectionChange(section.id)}
+              className={`
+                w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all duration-200
+                ${
+                  activeSection === section.id
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }
+              `}
+            >
+              <span
+                className={
+                  activeSection === section.id ? "text-white" : "text-slate-400"
+                }
+              >
+                {section.icon}
+              </span>
+              <span className="text-sm font-medium">{section.label}</span>
+              {activeSection === section.id && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* QUICK STATS */}
+        <div className="mt-4 pt-4 border-t space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Documents</span>
+            <span className="font-semibold text-slate-700">
+              {documentCount}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Messages</span>
+            <span className="font-semibold text-slate-700">
+              {messageCount}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Notes</span>
+            <span className="font-semibold text-slate-700">{noteCount}</span>
+          </div>
+          {consultationBooked && consultationTime && (
+            <div className="flex items-center justify-between text-xs pt-2 border-t">
+              <span className="text-slate-500">Next Meeting</span>
+              <span className="font-semibold text-blue-700">
+                {consultationTime}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

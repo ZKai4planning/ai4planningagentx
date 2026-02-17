@@ -44,12 +44,12 @@ const menu: MenuItem[] = [
   {
     label: "Users",
     icon: Users,
-    href: "/dashboard/users",
+    href: "/users",
   },
   {
     label: "Projects",
     icon: FolderKanban,
-    href: "/dashboard/projects",
+    href: "/projects",
   },
   // {
   //   label: "Submit to Agent Y",

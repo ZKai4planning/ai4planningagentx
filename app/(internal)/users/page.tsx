@@ -4,10 +4,10 @@ import { useState, useMemo } from "react"
 import {
   Eye,
   EyeOff,
-  CreditCard,
   Mail,
   Phone,
   Users,
+  MessageCircle,
 } from "lucide-react"
 import Link from "next/link"
 import DataTable, { Column } from "@/components/datatable"
@@ -64,9 +64,9 @@ function StatusBadge({ status }: { status: CustomerStatus }) {
 export default function CustomersPage() {
   const { customers } = useCustomers()
 
-  const [visibleContacts, setVisibleContacts] = useState<
-    Record<string, boolean>
-  >({})
+  const [visibleContacts, setVisibleContacts] = useState<Record<string, boolean>>(
+    {}
+  )
   const [statusFilter, setStatusFilter] =
     useState<CustomerStatus | "ALL">("ALL")
 
@@ -86,7 +86,7 @@ export default function CustomersPage() {
 
   /* ================= COLUMNS ================= */
 
-  const columns: Column<Customer>[] = [
+  const columns = useMemo<Column<Customer>[]>(() => [
     {
       key: "name",
       label: "Customer",
@@ -116,6 +116,7 @@ export default function CustomersPage() {
               <button
                 onClick={() => toggleContact(row.id)}
                 className="text-slate-400 hover:text-slate-700"
+                title="Toggle contact visibility"
               >
                 {visible ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
@@ -137,7 +138,7 @@ export default function CustomersPage() {
       label: "Project ID",
       render: (value, row) =>
         row.paymentStatus === "PAID" ? (
-          <span className="font-mono text-xs text-slate-700">
+          <span className="font-mono w-40 text-xs text-slate-700">
             {value}
           </span>
         ) : (
@@ -150,7 +151,7 @@ export default function CustomersPage() {
       label: "Service",
       render: (_, row) => (
         <div>
-          <p className="text-sm font-medium text-slate-800">
+          <p className="text-sm w-40 font-medium text-slate-800">
             {row.service}
           </p>
           <p className="text-xs text-slate-500">
@@ -164,7 +165,7 @@ export default function CustomersPage() {
       key: "serviceId",
       label: "Service ID",
       render: (value) => (
-        <span className="font-mono text-xs text-slate-700">
+        <span className="font-mono w-40 text-xs text-slate-700">
           {value}
         </span>
       ),
@@ -176,12 +177,6 @@ export default function CustomersPage() {
       render: (_, row) => (
         <div className="space-y-1">
           <PaymentBadge status={row.paymentStatus} />
-          {row.paymentStatus === "PAID" && (
-            <button className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
-              <CreditCard size={12} />
-              View Payment
-            </button>
-          )}
         </div>
       ),
     },
@@ -190,32 +185,71 @@ export default function CustomersPage() {
       key: "actions",
       label: "Actions",
       align: "right",
-      render: (_, row) => (
-        <div className="flex items-center justify-end gap-2">
-          <Link
-            href={`/dashboard/users/${row.id}`}
-            className="rounded-lg p-2 hover:bg-slate-100"
-          >
-            <Eye size={16} />
-          </Link>
+      render: (_, row) => {
+        const canInteract = visibleContacts[row.id]
 
-          <a
-            href={`mailto:${row.email}`}
-            className="rounded-lg p-2 hover:bg-slate-100"
-          >
-            <Mail size={16} />
-          </a>
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {/* View */}
+            <Link
+              href={`/users/${row.id}`}
+              className="rounded-lg p-2 hover:bg-slate-100"
+              title="View customer"
+            >
+              <Eye size={16} />
+            </Link>
 
-          <a
-            href={`tel:${row.phone}`}
-            className="rounded-lg p-2 hover:bg-slate-100"
-          >
-            <Phone size={16} />
-          </a>
-        </div>
-      ),
+            {/* Email */}
+            <a
+              href={canInteract ? `mailto:${row.email}` : undefined}
+              className={`rounded-lg p-2 ${
+                canInteract
+                  ? "hover:bg-slate-100"
+                  : "text-slate-300 cursor-not-allowed"
+              }`}
+              title="Send email"
+            >
+              <Mail size={16} />
+            </a>
+
+            {/* Phone */}
+            <a
+              href={canInteract ? `tel:${row.phone}` : undefined}
+              className={`rounded-lg p-2 ${
+                canInteract
+                  ? "hover:bg-slate-100"
+                  : "text-slate-300 cursor-not-allowed"
+              }`}
+              title="Call"
+            >
+              <Phone size={16} />
+            </a>
+
+            {/* WhatsApp */}
+            <a
+              href={
+                canInteract
+                  ? `https://wa.me/${row.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                      `Hi ${row.name}, this is Agent X regarding your service.`
+                    )}`
+                  : undefined
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              title="WhatsApp"
+              className={`rounded-lg p-2 ${
+                canInteract
+                  ? "text-emerald-600 hover:bg-emerald-50"
+                  : "text-slate-300 cursor-not-allowed"
+              }`}
+            >
+              <MessageCircle size={16} />
+            </a>
+          </div>
+        )
+      },
     },
-  ]
+  ], [visibleContacts])
 
   return (
     <div className="flex flex-col gap-6 max-w-8xl mx-auto px-10 py-6">

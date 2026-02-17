@@ -137,7 +137,7 @@ const columns: Column<ProjectRow>[] = [
     left: 1100,
     render: (_, row) => (
       <Link
-        href={`/dashboard/projects/${row.projectId}`}
+        href={`/projects/${row.projectId}`}
         className="
           inline-flex items-center gap-2
           rounded-lg bg-blue-600 px-4 py-2
