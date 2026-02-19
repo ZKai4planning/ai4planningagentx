@@ -1,16 +1,23 @@
 "use client"
 
 import { useState } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   LayoutDashboard,
   Users,
   FolderKanban,
-  Send,
+  Building2,
+  Banknote,
+  LogOut,
+  MessageSquare,
+  FileText,
+  StickyNote,
+  ListChecks,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Calendar,
 } from "lucide-react"
 import { cn } from "@/app/lib/utils"
 
@@ -25,6 +32,7 @@ type MenuItem = {
   label: string
   icon: React.ElementType
   href?: string
+  workspaceSection?: string
   children?: MenuChild[]
 }
 
@@ -35,7 +43,7 @@ type SidebarProps = {
 
 /* ================= MENU CONFIG ================= */
 
-const menu: MenuItem[] = [
+const defaultMenu: MenuItem[] = [
   {
     label: "Dashboard",
     icon: LayoutDashboard,
@@ -58,6 +66,22 @@ const menu: MenuItem[] = [
   // },
 ]
 
+function normalizeWorkspaceSection(sectionParam: string | null): string {
+  if (sectionParam === "chat" || sectionParam === "communication") {
+    return "communication"
+  }
+
+  if (sectionParam === "document" || sectionParam === "documents") {
+    return "documents"
+  }
+
+  if (sectionParam === "coordination") {
+    return "documents"
+  }
+
+  return sectionParam ?? "project"
+}
+
 /* ================= COMPONENT ================= */
 
 export default function Sidebar({
@@ -65,7 +89,117 @@ export default function Sidebar({
   onToggle,
 }: SidebarProps) {
   const pathname = usePathname()
-  const [openGroup, setOpenGroup] = useState<string | null>("Projects")
+  const searchParams = useSearchParams()
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const workspaceMatch = pathname.match(/^\/projects\/([^/]+)\/workspace(?:\/.*)?$/)
+  const workspaceRouteMatch = pathname.match(/^\/projects\/[^/]+\/workspace\/([^/?#]+)/)
+  const projectId = workspaceMatch?.[1]
+  const isWorkspace = Boolean(projectId)
+  const routeSection = workspaceRouteMatch?.[1]
+  const currentWorkspaceSection =
+    routeSection === "chat"
+      ? "customer-chat"
+      : routeSection === "agent-y-chat"
+      ? "agent-y-chat"
+      : routeSection === "customer-chat"
+      ? "customer-chat"
+      : routeSection === "agent-y-documents"
+      ? "agent-y-documents"
+      : routeSection === "customer-documents"
+      ? "customer-documents"
+      : routeSection === "documents"
+      ? "agent-y-documents"
+      : routeSection === "project"
+      ? "project"
+      : routeSection === "calendar"
+      ? "calendar"
+      : routeSection === "payments"
+      ? "payments"
+      : routeSection === "logs"
+      ? "logs"
+      : routeSection === "notes"
+      ? "notes"
+      : normalizeWorkspaceSection(searchParams.get("section"))
+
+  const workspaceMenu: MenuItem[] = isWorkspace
+    ? [
+        {
+          label: "Project Overview",
+          icon: Building2,
+          href: `/projects/${projectId}/workspace/project`,
+          workspaceSection: "project",
+        },
+        {
+          label: "Chat",
+          icon: MessageSquare,
+          children: [
+            {
+              label: "Agent Y Chat",
+              href: `/projects/${projectId}/workspace/agent-y-chat`,
+            },
+            {
+              label: "Customer Chat",
+              href: `/projects/${projectId}/workspace/customer-chat`,
+            },
+          ],
+        },
+        {
+          label: "Documents",
+          icon: FileText,
+          children: [
+            {
+              label: "Agent Y Documents",
+              href: `/projects/${projectId}/workspace/agent-y-documents`,
+            },
+            {
+              label: "Customer Documents",
+              href: `/projects/${projectId}/workspace/customer-documents`,
+            },
+          ],
+        },
+        {
+          label: "Payment Details",
+          icon: Banknote,
+          href: `/projects/${projectId}/workspace/payments`,
+          workspaceSection: "payments",
+        },
+        {
+          label: "Logs",
+          icon: ListChecks,
+          href: `/projects/${projectId}/workspace/logs`,
+          workspaceSection: "logs",
+        },
+        {
+          label: "Notes",
+          icon: StickyNote,
+          href: `/projects/${projectId}/workspace/notes`,
+          workspaceSection: "notes",
+        },
+        // {
+        //   label: "Project Handover",
+        //   icon: Send,
+        //   href: "/projects/handover",
+        // },
+        // {
+        //   label: "All Projects",
+        //   icon: FolderKanban,
+        //   href: "/projects",
+        // },
+        {
+          label: "Calendar",
+          icon: Calendar,
+          href: `/projects/${projectId}/workspace/calendar`,
+          workspaceSection: "calendar",
+        },
+         {
+          label: "Exit Workspace",
+          icon: LogOut,
+          href: "/projects",
+        },
+      ]
+    : defaultMenu
+
+  const menu = workspaceMenu
 
   return (
     <aside
@@ -99,11 +233,16 @@ export default function Sidebar({
       <nav className="flex-1 px-3 py-4 space-y-1">
         {menu.map((item) => {
           const Icon = item.icon
+          const isActive = item.workspaceSection && isWorkspace
+            ? currentWorkspaceSection === item.workspaceSection
+            : !!item.href &&
+              (pathname === item.href ||
+                (item.href !== "/projects" && pathname.startsWith(`${item.href}/`)))
+          const hasActiveChild = Boolean(
+            item.children?.some((child) => pathname === child.href)
+          )
 
-          // Only mark a top-level item active when the pathname exactly matches its href
-          const isActive = item.href && pathname === item.href
-
-          const isOpen = openGroup === item.label
+          const isOpen = openGroup === item.label || hasActiveChild
 
           /* ---------- SIMPLE LINK ---------- */
           if (!item.children) {
@@ -148,9 +287,14 @@ export default function Sidebar({
                 className={cn(
                   "group flex w-full items-center gap-3 rounded-xl py-3 text-sm font-medium transition",
                   collapsed ? "justify-center px-3" : "px-4",
-                  "text-slate-600 hover:bg-slate-100"
+                  hasActiveChild
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-600 hover:bg-slate-100"
                 )}
               >
+                {hasActiveChild && (
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-blue-600" />
+                )}
                 <Icon size={18} />
 
                 {!collapsed && (

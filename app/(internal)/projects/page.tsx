@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { FolderKanban, ArrowUpRight, Eye } from "lucide-react"
+import { FolderKanban, Eye } from "lucide-react"
 import DataTable, { Column } from "@/components/datatable"
 
 /* ================= TYPES ================= */
@@ -137,7 +137,7 @@ const columns: Column<ProjectRow>[] = [
     left: 1100,
     render: (_, row) => (
       <Link
-        href={`/projects/${row.projectId}`}
+        href={`/projects/${row.projectId}/workspace/project`}
         className="
           inline-flex items-center gap-2
           rounded-lg bg-blue-600 px-4 py-2
