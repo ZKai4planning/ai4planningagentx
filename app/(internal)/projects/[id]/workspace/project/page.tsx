@@ -95,20 +95,17 @@ const formSubmission = {
 }
 
 const flow = {
-  currentStep: 5,
+  currentStep: 2,
   steps: [
-    { label: "Profile Created", desc: "Account set up" },
-    { label: "Service Selected", desc: "HSPC chosen" },
-    { label: "£30 Advance Payment", desc: "paid" },
-    { label: "Eligibility Check", desc: "Passed" },
-    { label: "Consultant Assigned", desc: "In progress" },
-    { label: "Quote Submitted", desc: "Awaiting sign-off" },
-    { label: "70% Payment Completed", desc: "£6,930 pending" },
-    { label: "Project Allocated to Agent Y", desc: "Handoff done" },
+    { label: "Project Allocated", desc: "Project allocated in workspace" },
+    { label: "Project Assigned to Agent Y", desc: "Project handed over to Agent Y" },
+    { label: "Received Checklist", desc: "Current stage" },
+    { label: "Quote Raised", desc: "Quote generated and shared" },
+    { label: "70% Payment Received", desc: "Payment milestone completed" },
+    { label: "Document Collection and Review", desc: "Documents collected and reviewed" },
     { label: "Council Submission", desc: "Final stage" },
   ],
 }
-
 const project = {
   id: "aB3$k!",
   clientId: "ABC123-089",
@@ -1940,4 +1937,5 @@ function TeamMember({ label, name }: { label: string; name: string }) {
     </div>
   )
 }
+
 

@@ -176,13 +176,46 @@ export default function DashboardPage() {
             <p className="text-sm font-bold text-slate-900">Main Dashboard Header</p>
             <p className="text-xs text-slate-500">Aligned quick access and cross-channel notifications</p>
           </div>
-          <button
-            onClick={() => setShowNotifications((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-          >
-            <Bell size={13} className="text-blue-600" />
-            {DASHBOARD_NOTIFICATIONS.length} notifications
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              <Bell size={13} className="text-blue-600" />
+              {DASHBOARD_NOTIFICATIONS.length} notifications
+            </button>
+
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-[340px] max-w-[90vw] rounded-xl border bg-white shadow-lg p-2 z-40">
+                <div className="px-2 py-1 border-b mb-1">
+                  <p className="text-xs font-bold text-slate-800">Notifications</p>
+                </div>
+                <div className="max-h-[320px] overflow-y-auto space-y-1">
+                  {DASHBOARD_NOTIFICATIONS.map((n) => (
+                    <Link
+                      key={n.id}
+                      href={n.href}
+                      className="block rounded-lg border bg-slate-50 px-3 py-2 hover:bg-slate-100 transition"
+                      onClick={() => setShowNotifications(false)}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase ${
+                            n.from === "Agent Y" ? "text-indigo-700" : "text-emerald-700"
+                          }`}
+                        >
+                          {n.from === "Agent Y" ? <Bot size={11} /> : <UserRound size={11} />}
+                          {n.from}
+                        </span>
+                        <span className="text-[10px] text-slate-500">{n.time}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-700">{n.text}</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -194,22 +227,6 @@ export default function DashboardPage() {
           </Link>
         </div> */}
 
-        {showNotifications && (
-          <div className="mt-3 grid md:grid-cols-3 gap-2">
-            {DASHBOARD_NOTIFICATIONS.map((n) => (
-              <Link key={n.id} href={n.href} className="rounded-lg border bg-slate-50 px-3 py-2 hover:bg-slate-100 transition">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase ${n.from === "Agent Y" ? "text-indigo-700" : "text-emerald-700"}`}>
-                    {n.from === "Agent Y" ? <Bot size={11} /> : <UserRound size={11} />}
-                    {n.from}
-                  </span>
-                  <span className="text-[10px] text-slate-500">{n.time}</span>
-                </div>
-                <p className="mt-1 text-xs text-slate-700">{n.text}</p>
-              </Link>
-            ))}
-          </div>
-        )}
       </section>
 
       <header className="flex flex-wrap items-end justify-between gap-3">

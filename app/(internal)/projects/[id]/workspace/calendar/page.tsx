@@ -11,6 +11,7 @@ type EventType = {
   date: string // YYYY-MM-DD
   title: string
   color: string
+  detail?: string
 }
 
 export default function CalendarPage() {
@@ -18,53 +19,62 @@ export default function CalendarPage() {
 
   const today = new Date()
 
-  // Sample events (use ISO format)
+  // Project flow timeline events
   const events: EventType[] = [
     {
-      date: "2026-02-01",
-      title: "Initial Client Call",
-      color: "bg-blue-100 text-blue-800",
-    },
-    {
-      date: "2026-02-02",
-      title: "Setup",
+      date: "2026-02-10",
+      title: "Client Assigned to Agent X",
+      detail: "Flow Step 1",
       color: "bg-emerald-100 text-emerald-800",
     },
     {
-      date: "2026-02-03",
-      title: "Review Documents",
-      color: "bg-sky-100 text-sky-800",
-    },
-    {
-      date: "2026-02-08",
-      title: "Data Migration",
-      color: "bg-green-100 text-green-800",
-    },
-    {
-      date: "2026-02-02",
-      title: "Validation Loop",
-      color: "bg-emerald-500 text-white",
+      date: "2026-02-11",
+      title: "Project Assigned to Agent Y",
+      detail: "Flow Step 2",
+      color: "bg-emerald-100 text-emerald-800",
     },
     {
       date: "2026-02-12",
-      title: "Joint Workshop",
+      title: "Received Checklist (Current)",
+      detail: "Flow Step 3",
       color: "bg-blue-600 text-white",
+    },
+    {
+      date: "2026-02-14",
+      title: "Quote Raised",
+      detail: "Flow Step 4",
+      color: "bg-amber-100 text-amber-800",
+    },
+    {
+      date: "2026-02-16",
+      title: "70% Payment Received",
+      detail: "Flow Step 5",
+      color: "bg-amber-100 text-amber-800",
+    },
+    {
+      date: "2026-02-20",
+      title: "Document Collection and Review",
+      detail: "Flow Step 6",
+      color: "bg-sky-100 text-sky-800",
+    },
+    {
+      date: "2026-02-25",
+      title: "Council Submission",
+      detail: "Flow Step 7",
+      color: "bg-violet-100 text-violet-800",
     },
   ]
 
-  // Format month label
   const monthLabel = currentDate.toLocaleString("default", {
     month: "long",
     year: "numeric",
   })
 
-  // Get days in month
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-  // Get first day (Monday based)
   const firstDay = new Date(year, month, 1).getDay()
   const startOffset = firstDay === 0 ? 6 : firstDay - 1
 
@@ -83,14 +93,12 @@ export default function CalendarPage() {
   const generateCalendarCells = () => {
     const cells = []
 
-    // Empty cells before first day
     for (let i = 0; i < startOffset; i++) {
       cells.push(
         <div key={`empty-${i}`} className="border border-slate-200 bg-white" />
       )
     }
 
-    // Days
     for (let day = 1; day <= daysInMonth; day++) {
       const isoDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(
         day
@@ -123,6 +131,7 @@ export default function CalendarPage() {
               <div
                 key={idx}
                 className={`text-xs px-2 py-1 rounded-md truncate ${event.color}`}
+                title={event.detail ? `${event.title} - ${event.detail}` : event.title}
               >
                 {event.title}
               </div>
@@ -137,7 +146,6 @@ export default function CalendarPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold">{monthLabel}</h1>
@@ -176,7 +184,29 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Week Days */}
+      <div className="rounded-xl border bg-white p-4 mb-4">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+          Customer Journey Flow in Calendar
+        </p>
+        <div className="flex flex-wrap gap-2 text-[11px]">
+          <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1">
+            Completed
+          </span>
+          <span className="rounded-full bg-blue-600 text-white px-2.5 py-1">
+            Current: Received Checklist
+          </span>
+          <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-1">
+            Next: Quote & Payment
+          </span>
+          <span className="rounded-full bg-sky-100 text-sky-800 px-2.5 py-1">
+            Review
+          </span>
+          <span className="rounded-full bg-violet-100 text-violet-800 px-2.5 py-1">
+            Final
+          </span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-7 text-sm text-slate-500 mb-2">
         {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((day) => (
           <div key={day} className="p-2">
@@ -185,7 +215,6 @@ export default function CalendarPage() {
         ))}
       </div>
 
-      {/* Calendar Grid */}
       <div className="grid grid-cols-7 border border-slate-200 rounded-xl overflow-hidden bg-white">
         {generateCalendarCells()}
       </div>
