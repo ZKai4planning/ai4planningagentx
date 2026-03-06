@@ -136,7 +136,9 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all")
   const [showNotifications, setShowNotifications] = useState(false)
   const userId = useAuthStore((state) => state.userId)
+  const name = useAuthStore((state) => state.name)
   const email = useAuthStore((state) => state.email)
+  const displayName = name?.trim() || email?.split("@")[0] || userId || "Unknown"
 
   const filteredProjects = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -182,7 +184,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-slate-500">Logged in</span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-              {email ?? userId ?? "Unknown"}
+              {displayName}
             </span>
           </div>
           <div className="relative">
@@ -240,7 +242,7 @@ export default function DashboardPage() {
 
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Agent X Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">{displayName} Dashboard</h1>
           <p className="text-sm text-slate-500">
             Spotlight 1-2 priority projects, with fast access to all projects and features.
           </p>

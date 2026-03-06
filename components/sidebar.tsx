@@ -20,6 +20,7 @@ import {
   Calendar,
 } from "lucide-react"
 import { cn } from "@/app/lib/utils"
+import { useAuthStore } from "@/lib/zustand"
 
 /* ================= TYPES ================= */
 
@@ -90,6 +91,8 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const name = useAuthStore((state) => state.name)
+  const email = useAuthStore((state) => state.email)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const workspaceMatch = pathname.match(/^\/projects\/([^/]+)\/workspace(?:\/.*)?$/)
   const workspaceRouteMatch = pathname.match(/^\/projects\/[^/]+\/workspace\/([^/?#]+)/)
@@ -200,6 +203,9 @@ export default function Sidebar({
     : defaultMenu
 
   const menu = workspaceMenu
+  const displayName =
+    (name && name.trim().length > 0 ? name.trim() : null) ??
+    (email ? email.split("@")[0] : "User")
 
   return (
     <aside
@@ -357,7 +363,7 @@ export default function Sidebar({
               Good Afternoon
             </p>
             <p className="text-sm font-semibold text-slate-900">
-              Agent X 👋
+              {displayName}
             </p>
           </div>
         </div>

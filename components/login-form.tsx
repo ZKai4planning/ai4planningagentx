@@ -359,7 +359,7 @@ const resetErrorState = () => {
       resetErrorState();
 
       try {
-        await axiosInstance.post("/admin/auth/login", {
+        await axiosInstance.post("/employee/auth/login", {
           email,
           password,
           region: loginRegion,
@@ -416,7 +416,7 @@ const resetErrorState = () => {
 
       let res: any;
       try {
-        res = await axiosInstance.post("/admin/auth/verify-otp", {
+        res = await axiosInstance.post("/employee/auth/verify-otp", {
           email,
           otp: otpCode,
         });
@@ -452,7 +452,7 @@ const handleResendOtp = async () => {
   setSuccessMessage(null);
 
   try {
-    await axiosInstance.post("/admin/auth/resend-otp", { email });
+    await axiosInstance.post("/employee/auth/resend-otp", { email });
 
     // ✅ SUCCESS MESSAGE
     setSuccessMessage("OTP sent successfully");
@@ -471,7 +471,7 @@ const handleResendOtp = async () => {
       {/* Header */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Admin Sign In
+           Sign In
         </h2>
       </div>
 
