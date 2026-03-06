@@ -58,6 +58,197 @@ export default function AgentYDocumentsPage() {
     e.target.value = ""
   }
 
+  const renderDocCard = (doc: (typeof state.checklist)[number]) => (
+    <div key={doc.id} className="rounded-xl border bg-slate-50 px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-slate-900">{doc.name}</p>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                doc.required ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-700"
+              }`}
+            >
+              {doc.required ? "Required" : "Optional"}
+            </span>
+            {doc.customerUpload && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700">
+                Uploaded by Customer
+              </span>
+            )}
+            {doc.agentYUpload && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-violet-100 text-violet-700">
+                Uploaded by Agent Y
+              </span>
+            )}
+            {doc.agentXUpload && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-slate-200 text-slate-700">
+                Uploaded by Agent X
+              </span>
+            )}
+            {doc.requestedToAgentY && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-blue-100 text-blue-700">
+                Requested to Agent Y
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-600 mt-1">{doc.description}</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Allowed: {doc.allowedFileTypes.join(", ")}
+          </p>
+          {doc.customerUpload && (
+            <div className="mt-2 text-[11px]">
+              <p className="text-slate-700 font-semibold">
+                Customer: {doc.customerUpload.name} - {doc.customerUpload.size}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button
+                  onClick={() =>
+                    viewDocument(
+                      doc.customerUpload!.name,
+                      doc.customerUpload!.size,
+                      doc.customerUpload!.uploadedAt
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Eye size={11} />
+                  View
+                </button>
+                <button
+                  onClick={() =>
+                    downloadDocumentMeta(
+                      doc.customerUpload!.name,
+                      doc.customerUpload!.size,
+                      doc.customerUpload!.uploadedAt
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Download size={11} />
+                  Download
+                </button>
+              </div>
+            </div>
+          )}
+          {doc.agentYUpload && (
+            <div className="mt-2 text-[11px]">
+              <p className="text-slate-700 font-semibold">
+                Agent Y: {doc.agentYUpload.name} - {doc.agentYUpload.size}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button
+                  onClick={() =>
+                    viewDocument(
+                      doc.agentYUpload!.name,
+                      doc.agentYUpload!.size,
+                      doc.agentYUpload!.uploadedAt
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Eye size={11} />
+                  View
+                </button>
+                <button
+                  onClick={() =>
+                    downloadDocumentMeta(
+                      doc.agentYUpload!.name,
+                      doc.agentYUpload!.size,
+                      doc.agentYUpload!.uploadedAt
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Download size={11} />
+                  Download
+                </button>
+              </div>
+            </div>
+          )}
+          {doc.agentXUpload && (
+            <div className="mt-2 text-[11px]">
+              <p className="text-slate-700 font-semibold">
+                Agent X: {doc.agentXUpload.name} - {doc.agentXUpload.size}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button
+                  onClick={() =>
+                    viewDocument(
+                      doc.agentXUpload!.name,
+                      doc.agentXUpload!.size,
+                      doc.agentXUpload!.uploadedAt
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Eye size={11} />
+                  View
+                </button>
+                <button
+                  onClick={() =>
+                    downloadDocumentMeta(
+                      doc.agentXUpload!.name,
+                      doc.agentXUpload!.size,
+                      doc.agentXUpload!.uploadedAt
+                    )
+                  }
+                  className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Download size={11} />
+                  Download
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => toggleRequestForCustomer(doc.id, !doc.requestedByAgentX)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              doc.requestedByAgentX
+                ? "bg-blue-600 border-blue-600 text-white"
+                : "bg-white text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            {doc.requestedByAgentX ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+            {doc.requestedByAgentX ? "Requested to Customer" : "Request to Customer"}
+          </button>
+
+          <button
+            onClick={() => toggleRequestToAgentY(doc.id, !doc.requestedToAgentY)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              doc.requestedToAgentY
+                ? "bg-indigo-600 border-indigo-600 text-white"
+                : "bg-white text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            {doc.requestedToAgentY ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+            {doc.requestedToAgentY ? "Requested to Agent Y" : "Request to Agent Y"}
+          </button>
+
+          {doc.requestedToAgentY && !doc.agentYUpload && (
+            <button
+              onClick={() => markReceivedFromAgentY(doc.id)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-xs font-semibold"
+            >
+              Mark Received from Agent Y
+            </button>
+          )}
+
+          <button
+            onClick={() => triggerManualUpload(doc.id)}
+            className="inline-flex items-center gap-1.5 rounded-lg border bg-white text-slate-700 hover:bg-slate-100 px-3 py-2 text-xs font-semibold"
+          >
+            <Upload size={13} />
+            Upload Manually (Agent X)
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-12">
       <div className="max-w-[1200px] mx-auto px-6 lg:px-8 pt-8 space-y-5">
@@ -96,196 +287,7 @@ export default function AgentYDocumentsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {state.checklist.map((doc) => (
-                <div key={doc.id} className="rounded-xl border bg-slate-50 px-4 py-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{doc.name}</p>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            doc.required ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {doc.required ? "Required" : "Optional"}
-                        </span>
-                        {doc.customerUpload && (
-                          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700">
-                            Uploaded by Customer
-                          </span>
-                        )}
-                        {doc.agentYUpload && (
-                          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-violet-100 text-violet-700">
-                            Uploaded by Agent Y
-                          </span>
-                        )}
-                        {doc.agentXUpload && (
-                          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-slate-200 text-slate-700">
-                            Uploaded by Agent X
-                          </span>
-                        )}
-                        {doc.requestedToAgentY && (
-                          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase bg-blue-100 text-blue-700">
-                            Requested to Agent Y
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-600 mt-1">{doc.description}</p>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Allowed: {doc.allowedFileTypes.join(", ")}
-                      </p>
-                      {doc.customerUpload && (
-                        <div className="mt-2 text-[11px]">
-                          <p className="text-slate-700 font-semibold">
-                            Customer: {doc.customerUpload.name} - {doc.customerUpload.size}
-                          </p>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            <button
-                              onClick={() =>
-                                viewDocument(
-                                  doc.customerUpload!.name,
-                                  doc.customerUpload!.size,
-                                  doc.customerUpload!.uploadedAt
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              <Eye size={11} />
-                              View
-                            </button>
-                            <button
-                              onClick={() =>
-                                downloadDocumentMeta(
-                                  doc.customerUpload!.name,
-                                  doc.customerUpload!.size,
-                                  doc.customerUpload!.uploadedAt
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              <Download size={11} />
-                              Download
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {doc.agentYUpload && (
-                        <div className="mt-2 text-[11px]">
-                          <p className="text-slate-700 font-semibold">
-                            Agent Y: {doc.agentYUpload.name} - {doc.agentYUpload.size}
-                          </p>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            <button
-                              onClick={() =>
-                                viewDocument(
-                                  doc.agentYUpload!.name,
-                                  doc.agentYUpload!.size,
-                                  doc.agentYUpload!.uploadedAt
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              <Eye size={11} />
-                              View
-                            </button>
-                            <button
-                              onClick={() =>
-                                downloadDocumentMeta(
-                                  doc.agentYUpload!.name,
-                                  doc.agentYUpload!.size,
-                                  doc.agentYUpload!.uploadedAt
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              <Download size={11} />
-                              Download
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {doc.agentXUpload && (
-                        <div className="mt-2 text-[11px]">
-                          <p className="text-slate-700 font-semibold">
-                            Agent X: {doc.agentXUpload.name} - {doc.agentXUpload.size}
-                          </p>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            <button
-                              onClick={() =>
-                                viewDocument(
-                                  doc.agentXUpload!.name,
-                                  doc.agentXUpload!.size,
-                                  doc.agentXUpload!.uploadedAt
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              <Eye size={11} />
-                              View
-                            </button>
-                            <button
-                              onClick={() =>
-                                downloadDocumentMeta(
-                                  doc.agentXUpload!.name,
-                                  doc.agentXUpload!.size,
-                                  doc.agentXUpload!.uploadedAt
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              <Download size={11} />
-                              Download
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => toggleRequestForCustomer(doc.id, !doc.requestedByAgentX)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${
-                          doc.requestedByAgentX
-                            ? "bg-blue-600 border-blue-600 text-white"
-                            : "bg-white text-slate-700 hover:bg-slate-100"
-                        }`}
-                      >
-                        {doc.requestedByAgentX ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-                        {doc.requestedByAgentX ? "Requested to Customer" : "Request to Customer"}
-                      </button>
-
-                      <button
-                        onClick={() => toggleRequestToAgentY(doc.id, !doc.requestedToAgentY)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${
-                          doc.requestedToAgentY
-                            ? "bg-indigo-600 border-indigo-600 text-white"
-                            : "bg-white text-slate-700 hover:bg-slate-100"
-                        }`}
-                      >
-                        {doc.requestedToAgentY ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-                        {doc.requestedToAgentY ? "Requested to Agent Y" : "Request to Agent Y"}
-                      </button>
-
-                      {doc.requestedToAgentY && !doc.agentYUpload && (
-                        <button
-                          onClick={() => markReceivedFromAgentY(doc.id)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-xs font-semibold"
-                        >
-                          Mark Received from Agent Y
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => triggerManualUpload(doc.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border bg-white text-slate-700 hover:bg-slate-100 px-3 py-2 text-xs font-semibold"
-                      >
-                        <Upload size={13} />
-                        Upload Manually (Agent X)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {state.checklist.map((doc) => renderDocCard(doc))}
             </div>
           )}
 

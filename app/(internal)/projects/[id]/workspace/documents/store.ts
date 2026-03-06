@@ -265,7 +265,7 @@ export function useDocumentMediation(projectId: string) {
             }
           : doc
       ),
-      logs: [createLog("Agent Y", "Marked received from Agent Y", docId), ...prev.logs],
+      logs: [createLog("Agent Y", "Agent Y submitted missing document", docId), ...prev.logs],
     }))
   }
 
@@ -350,6 +350,26 @@ export function useDocumentMediation(projectId: string) {
     }))
   }
 
+  const notifyMissingDocsSentToAgentX = () => {
+    setState((prev) => {
+      if (prev.logs.some((log) => log.action === "Missing documents sent to Agent X")) return prev
+      return {
+        ...prev,
+        logs: [createLog("Agent Y", "Missing documents sent to Agent X", "checklist-batch"), ...prev.logs],
+      }
+    })
+  }
+
+  const notifyRequiredDocsSentToAgentY = () => {
+    setState((prev) => {
+      if (prev.logs.some((log) => log.action === "Required documents sent to Agent Y")) return prev
+      return {
+        ...prev,
+        logs: [createLog("Agent X", "Required documents sent to Agent Y", "required-docs"), ...prev.logs],
+      }
+    })
+  }
+
   return {
     state,
     hydrated,
@@ -363,6 +383,8 @@ export function useDocumentMediation(projectId: string) {
     uploadCustomerDocument,
     toggleAssignToAgentY,
     markReceivedFromCustomer,
+    notifyMissingDocsSentToAgentX,
+    notifyRequiredDocsSentToAgentY,
     logs: state.logs,
     logsForAgentYDocs,
     logsForAgentXDocs,

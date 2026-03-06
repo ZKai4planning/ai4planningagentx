@@ -2,7 +2,7 @@ import { BlueprintBackground } from "@/components/blueprint-background";
 import { BlueprintLeftSection } from "@/components/blueprint-left-section";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { LoginFooter } from "@/components/login-footer";
-import { LoginForm } from "@/components/login-form";
+import  LoginForm  from "@/components/login-form";
 import { LoginHeader } from "@/components/login-header";
 
 
@@ -10,7 +10,7 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen flex-col blueprint-grid selection:bg-primary selection:text-white">
       {/* Navigation Header */}
-      <LoginHeader />
+      {/* <LoginHeader /> */}
 
       {/* Main Content */}
       <main className="relative flex flex-1 items-center justify-center p-6">

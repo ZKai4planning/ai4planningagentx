@@ -11,29 +11,47 @@ import {
 type JourneyStep = {
   label: string
   desc: string
+  details?: string[]
 }
 
 type CustomerJourneyProps = {
   steps: JourneyStep[]
   currentStep: number
+  showAdvance?: boolean
+  advanceLabel?: string
+  onAdvance?: () => void
+  onStepSelect?: (index: number) => void
+  notificationSlot?: React.ReactNode
+  calloutActions?: React.ReactNode
 }
 
 export default function CustomerJourney({
   steps,
   currentStep,
+  showAdvance = false,
+  advanceLabel = "Advance",
+  onAdvance,
+  onStepSelect,
+  notificationSlot,
+  calloutActions,
 }: CustomerJourneyProps) {
   return (
     <div className="max-w-[1600px] mx-auto px-6 lg:px-8 mt-6">
       <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">
-              Customer Journey
-            </h2>
-            <p className="text-sm text-slate-500">
-              End-to-end service lifecycle
-            </p>
+          <div className="flex items-center gap-3">
+            {notificationSlot ? (
+              <div className="flex items-center">{notificationSlot}</div>
+            ) : null}
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">
+                Customer Journey
+              </h2>
+              <p className="text-sm text-slate-500">
+                End-to-end service lifecycle
+              </p>
+            </div>
           </div>
           <div className="text-sm font-semibold text-slate-600">
             Step {currentStep + 1} of {steps.length}
@@ -65,7 +83,22 @@ export default function CustomerJourney({
               return (
                 <div
                   key={i}
-                  className="flex flex-col items-center gap-2 relative"
+                  className={`flex flex-col items-center gap-2 relative ${
+                    onStepSelect ? "cursor-pointer" : ""
+                  }`}
+                  role={onStepSelect ? "button" : undefined}
+                  tabIndex={onStepSelect ? 0 : undefined}
+                  onClick={onStepSelect ? () => onStepSelect(i) : undefined}
+                  onKeyDown={
+                    onStepSelect
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            onStepSelect(i)
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   {/* Node */}
                   <div
@@ -129,6 +162,40 @@ export default function CustomerJourney({
               <p className="text-sm text-slate-600">
                 {steps[currentStep]?.desc}
               </p>
+
+              {calloutActions ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {calloutActions}
+                </div>
+              ) : null}
+
+              {showAdvance && onAdvance ? (
+                <button
+                  type="button"
+                  onClick={onAdvance}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                >
+                  {advanceLabel}
+                </button>
+              ) : null}
+
+              {steps[currentStep]?.details?.length ? (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-slate-500 mb-2">
+                    Required documents
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {steps[currentStep]?.details?.map((item) => (
+                      <span
+                        key={item}
+                        className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {steps[currentStep + 1] && (
                 <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">

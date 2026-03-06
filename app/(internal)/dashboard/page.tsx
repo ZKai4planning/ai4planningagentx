@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
+import { useAuthStore } from "@/lib/zustand"
 import {
   AlertTriangle,
   Bell,
@@ -134,6 +135,8 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all")
   const [showNotifications, setShowNotifications] = useState(false)
+  const userId = useAuthStore((state) => state.userId)
+  const email = useAuthStore((state) => state.email)
 
   const filteredProjects = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -175,6 +178,12 @@ export default function DashboardPage() {
           <div>
             <p className="text-sm font-bold text-slate-900">Main Dashboard Header</p>
             <p className="text-xs text-slate-500">Aligned quick access and cross-channel notifications</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Logged in</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {email ?? userId ?? "Unknown"}
+            </span>
           </div>
           <div className="relative">
             <button

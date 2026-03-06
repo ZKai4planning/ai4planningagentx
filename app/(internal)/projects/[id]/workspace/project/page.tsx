@@ -4,6 +4,7 @@ import Link from "next/link"
 import SendToAgentAnimation from "@/components/SendToAgentAnimation"
 import { useParams, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
+import { useDocumentMediation } from "../documents/store"
 import {
   Phone,
   Mail,
@@ -15,6 +16,7 @@ import {
   Send,
   X,
   ChevronRight,
+  Upload,
   Building2,
   Calendar,
   Ruler,
@@ -43,120 +45,19 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
+import {
+  customer,
+  formSubmission,
+  flow,
+  project,
+  quote,
+  requirements,
+} from "./workspaceData"
 
 
 
 
 
-const customer = {
-  name: "Zafer Khan",
-  phone: "0776862279",
-  email: "zafer.khan@ai4planning.com",
-  location: "42 Brick Lane, London, E1 6RF",
-  status: "Active",
-}
-
-// NEW: Form submission data from the images
-const formSubmission = {
-  applicantName: "Zafer Khan",
-  contactEmail: "zafer.khan@ai4planning.com",
-  contactPhone: "0776862279",
-  siteAddress: "42 Brick Lane, London",
-  postcode: "E1 6RF",
-  propertyType: "Detached house",
-  ownershipStatus: "Freehold",
-  conservationArea: "No",
-  purposeOfDevelopment: "Rear extension",
-  
-  // Dimensions from step 2
-  existingWidth: "5.4",
-  existingDepth: "11.8",
-  proposedExtensionDepth: "3.6m",
-  proposedExtensionHeight: "3.2m",
-  externalMaterials: "Match existing",
-  briefDescription: "'Single-storey rear extension with open-plan kitchen-dining and rear glazing.",
-  
-  // Constraints from step 3
-  listedBuilding: "No",
-  tpo: "No",
-  floodZone: "No",
-  vehicleAccess: "Yes",
-  preApplicationAdvice: "No",
-  additionalConsents: "None",
-  
-  // Consultation booking
-  consultationBooked: true,
-  consultationDate: "February 13, 2026",
-  consultationTime: "11:00 AM",
-  consultant: "Sarah",
-  consultantTitle: "Senior Planning Consultant",
-  consultationType: "Verification Session",
-  consultationDuration: "15 min video call",
-}
-
-const flow = {
-  currentStep: 2,
-  steps: [
-    { label: "Project Allocated", desc: "Project allocated in workspace" },
-    { label: "Project Assigned to Agent Y", desc: "Project handed over to Agent Y" },
-    { label: "Received Checklist", desc: "Current stage" },
-    { label: "Quote Raised", desc: "Quote generated and shared" },
-    { label: "70% Payment Received", desc: "Payment milestone completed" },
-    { label: "Document Collection and Review", desc: "Documents collected and reviewed" },
-    { label: "Council Submission", desc: "Final stage" },
-  ],
-}
-const project = {
-  id: "aB3$k!",
-  clientId: "ABC123-089",
-  clientName: "Zafer Khan",
-  title: "Residential Extension - Brick Lane",
-  description: "Adding a rear extension to existing residential property",
-  service: "Householder Planning Consent",
-  serviceType: "extension",
-  serviceNo: "HSPC-UK-007",
-  stage: "Pre-Planning",
-  location: "42 Brick Lane, London",
-  postcode: "E1 6RF",
-  status: "architect_assigned",
-  createdDate: "2025-12-20",
-  updatedDate: "2026-01-20",
-  agentX: "James Mitchell",
-  agentY: "Rajesh Patel",
-  architect: "David Brown",
-  progress: 45,
-  estimatedCompletionDate: "2026-03-15",
-  councilReference: "TOWER/2026/00234",
-  councilName: "Tower Hamlets Council",
-  timeline: "01 Jan → 30 Jun 2026",
-}
-
-const requirements = {
-  propertyType: "Terraced house",
-  locationType: "Residential",
-  timeline: "4–6 Months",
-  scope: [
-    "Single-storey rear extension",
-    "Internal layout modification",
-  ],
-  constraints: [
-    "Council height regulations",
-    "Neighbour boundary on left",
-  ],
-  notes: "Client prefers modern elevation and minimal disruption during construction.",
-}
-
-const quote = {
-  reference: "QT-UK-2219",
-  submittedOn: "18 Feb 2026",
-  status: "approved",
-  total: "£9,900",
-  breakdown: [
-    { label: "Consultancy", amount: "£4,200", pct: 42 },
-    { label: "Drawings", amount: "£3,100", pct: 31 },
-    { label: "Council Fees", amount: "£2,600", pct: 27 },
-  ],
-}
 
 type SectionId =
   | "coordination"
@@ -254,9 +155,21 @@ export default function UserDetailsPage() {
   const { id } = useParams()
   const projectId = Array.isArray(id) ? id[0] : id
   const searchParams = useSearchParams()
+  const {
+    notifyMissingDocsSentToAgentX,
+    notifyRequiredDocsSentToAgentY,
+    logs,
+    requiredForCustomer,
+    state: documentState,
+    loadChecklistFromAgentY,
+    toggleRequestForCustomer,
+    markReceivedFromAgentY,
+  } = useDocumentMediation(projectId ?? "unknown-project")
   const selectedSection = getInitialSection(searchParams.get("section"))
+  const stepParam = searchParams.get("step")
   const [open, setOpen] = useState(false)
   const [assignStage, setAssignStage] = useState<"preview" | "success">("preview")
+  const [agentYAssigned, setAgentYAssigned] = useState(false)
   const [showHandoverAnimation, setShowHandoverAnimation] = useState(false)
   const [noteText, setNoteText] = useState("")
   const [notes, setNotes] = useState([
@@ -267,12 +180,129 @@ export default function UserDetailsPage() {
   const [coordinationTasks, setCoordinationTasks] = useState<CoordinationTask[]>(
     INITIAL_COORDINATION_TASKS
   )
-const router=useRouter()
-  
+  const [currentStep, setCurrentStep] = useState(flow.currentStep)
+  const [pendingDocRequest, setPendingDocRequest] = useState(false)
+  const router = useRouter()
+
+  const checklistStepIndex = flow.steps.findIndex((step) => step.label === "Received Checklist")
+  const quoteStepIndex = flow.steps.findIndex((step) => step.label === "Quote Raised")
+  const paymentStepIndex = flow.steps.findIndex((step) => step.label === "70% Payment Received")
+  const documentStepIndex = flow.steps.findIndex(
+    (step) => step.label === "Document Collection and Review"
+  )
+  const handoverStepIndex = flow.steps.findIndex(
+    (step) => step.label === "Project Handed Over to Agent Y"
+  )
+
 
   useEffect(() => {
     setActiveSection(selectedSection)
   }, [selectedSection])
+
+  useEffect(() => {
+    if (!stepParam) return
+    if (stepParam === "checklist" && checklistStepIndex >= 0) {
+      setCurrentStep(checklistStepIndex)
+      return
+    }
+    if (stepParam === "quote" && quoteStepIndex >= 0) {
+      setCurrentStep(quoteStepIndex)
+      return
+    }
+    if (stepParam === "payment" && paymentStepIndex >= 0) {
+      setCurrentStep(paymentStepIndex)
+      return
+    }
+    if (stepParam === "documents" && documentStepIndex >= 0) {
+      setCurrentStep(documentStepIndex)
+    }
+  }, [stepParam, checklistStepIndex, quoteStepIndex, paymentStepIndex, documentStepIndex])
+
+  useEffect(() => {
+    if (flow.steps[currentStep]?.label !== "Received Checklist") return
+    if (documentState.checklist.length > 0) return
+    loadChecklistFromAgentY()
+  }, [currentStep, documentState.checklist.length, loadChecklistFromAgentY])
+
+  useEffect(() => {
+    if (!pendingDocRequest) return
+    if (documentState.checklist.length === 0) return
+    const requiredDocs = documentState.checklist.filter((doc) => doc.required)
+    requiredDocs.forEach((doc) => toggleRequestForCustomer(doc.id, true))
+    if (requiredDocs[0]) {
+      markReceivedFromAgentY(requiredDocs[0].id)
+    }
+    setPendingDocRequest(false)
+  }, [
+    pendingDocRequest,
+    documentState.checklist,
+    toggleRequestForCustomer,
+    markReceivedFromAgentY,
+  ])
+
+  const handleAdvanceToQuote = () => {
+    if (quoteStepIndex < 0) return
+    setCurrentStep(quoteStepIndex)
+    setActiveSection("quote")
+    if (projectId) {
+      router.push(`/projects/${projectId}/workspace/project?section=quote`)
+    }
+  }
+
+  const handleAdvanceToPayment = () => {
+    if (paymentStepIndex < 0) return
+    setCurrentStep(paymentStepIndex)
+    setActiveSection("payments")
+    if (projectId) {
+      router.push(`/projects/${projectId}/workspace/project?section=payments`)
+    }
+  }
+
+  const handleAdvanceToDocuments = () => {
+    setActiveSection("documents")
+    if (projectId) {
+      router.push(`/projects/${projectId}/workspace/agent-y-documents`)
+    }
+  }
+
+  const handleRequestDocuments = () => {
+    if (documentState.checklist.length === 0) {
+      setPendingDocRequest(true)
+      loadChecklistFromAgentY()
+      return
+    }
+    const requiredDocs = documentState.checklist.filter((doc) => doc.required)
+    requiredDocs.forEach((doc) => toggleRequestForCustomer(doc.id, true))
+    if (requiredDocs[0]) {
+      markReceivedFromAgentY(requiredDocs[0].id)
+    }
+  }
+
+  const handleStepSelect = (index: number) => {
+    setCurrentStep(index)
+    const label = flow.steps[index]?.label
+    if (label === "Received Checklist") {
+      setActiveSection("documents")
+      return
+    }
+    if (label === "Quote Raised") {
+      setActiveSection("quote")
+      return
+    }
+    if (label === "70% Payment Received") {
+      setActiveSection("payments")
+      return
+    }
+    if (label === "Document Collection and Review") {
+      setActiveSection("documents")
+      return
+    }
+    if (label === "Council Submission") {
+      setActiveSection("submission")
+      return
+    }
+    setActiveSection("project")
+  }
 
   const handleOpenAssignAgentYPreview = () => {
     setShowHandoverAnimation(true)
@@ -285,6 +315,8 @@ const router=useRouter()
 
   const handleConfirmSendToAgentY = () => {
     setAssignStage("success")
+    setAgentYAssigned(true)
+    notifyRequiredDocsSentToAgentY()
   }
 
   const handleAssignDialogOpenChange = (nextOpen: boolean) => {
@@ -308,8 +340,24 @@ const router=useRouter()
     )
   }
 
-  const progressValue = Math.round((flow.currentStep / (flow.steps.length - 1)) * 100)
-
+  const progressValue = Math.round((currentStep / (flow.steps.length - 1)) * 100)
+  const checklistLoaded = documentState.checklist.length > 0
+  const requiredChecklistNames = documentState.checklist
+    .filter((doc) => doc.required)
+    .map((doc) => doc.name)
+  const journeySteps = flow.steps.map((step) =>
+    step.label === "Received Checklist"
+      ? {
+          ...step,
+          details: requiredChecklistNames,
+          desc: !checklistLoaded
+            ? "Checklist pending from Agent Y."
+            : requiredChecklistNames.length > 0
+            ? "Checklist received. Required documents listed below."
+            : "Checklist received. No required documents flagged.",
+        }
+      : step
+  )
   const sectionMeta: Record<SectionId, { title: string; hint: string }> = {
     project: {
       title: "Project Overview",
@@ -367,57 +415,47 @@ const router=useRouter()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-12">
-      {/* ── PAGE HEADER ── */}
-      <div className="bg-white border-b sticky top-0 z-40 backdrop-blur-sm bg-white/95">
-        <div className="max-w-[1600px] mx-auto px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/projects"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg border px-3 py-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                {"< All Projects"}
-              </Link>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-slate-900">
-                    {customer.name}
-                  </h1>
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
-                    {customer.status}
-                  </span>
-                  {formSubmission.consultationBooked && (
-                    <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold flex items-center gap-1">
-                      <Video size={12} />
-                      Consultation Scheduled
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-slate-500 mt-1">
-                  Customer ID · {id ?? project.clientId} · {project.service} ·{" "}
-                  {project.timeline}
-                </p>
-              </div>
-            </div>
-
-            {/* Progress pill */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-full px-4 py-2">
-                <TrendingUp size={14} className="text-blue-600" />
-                <span className="text-sm font-bold text-blue-900">
-                  {progressValue}%
-                </span>
-                <span className="text-xs text-blue-600">Journey Progress</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── JOURNEY TRACKER ── */}
+      {/* ?????? JOURNEY TRACKER ?????? */}
       <CustomerJourney
-      steps={flow.steps}
-      currentStep={flow.currentStep}
+      steps={journeySteps}
+      currentStep={currentStep}
+      showAdvance={
+        currentStep === checklistStepIndex ||
+        currentStep === quoteStepIndex ||
+        currentStep === paymentStepIndex
+      }
+      calloutActions={
+        currentStep === handoverStepIndex ? (
+          <button
+            type="button"
+            onClick={agentYAssigned ? undefined : handleOpenAssignAgentYPreview}
+            disabled={agentYAssigned}
+            className={`inline-flex items-center gap-2 rounded-xl text-sm font-semibold px-4 py-2.5 transition-colors ${
+              agentYAssigned
+                ? "bg-emerald-100 text-emerald-800 cursor-default"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+            }`}
+          >
+            {agentYAssigned ? <CheckCircle size={15} /> : <Send size={15} />}
+            {agentYAssigned ? "Assigned" : "Assign Agent Y"}
+          </button>
+        ) : null
+      }
+      advanceLabel={
+        currentStep === quoteStepIndex
+          ? "Mark 70% Payment Received"
+          : currentStep === paymentStepIndex
+          ? "Open Documents"
+          : "Raise Quote"
+      }
+      onAdvance={
+        currentStep === quoteStepIndex
+          ? handleAdvanceToPayment
+          : currentStep === paymentStepIndex
+          ? handleAdvanceToDocuments
+          : handleAdvanceToQuote
+      }
+      onStepSelect={handleStepSelect}
     />
 
       {/* ── MAIN CONTENT WITH SIDEBAR ── */}
@@ -446,6 +484,7 @@ const router=useRouter()
                 </div>
               </div>
             </div>
+
             
             {/* NEW: FORM SUBMISSION DETAILS */}
             {activeSection === "submission" && (
@@ -937,21 +976,7 @@ const router=useRouter()
             {/* PROJECT OVERVIEW */}
             {activeSection === "project" && (
               <div>
-                <div className="flex items-center justify-between gap-3 mb-6">
-                  <div className="flex items-center gap-2">
-                    <Building2 size={18} className="text-blue-600" />
-                    <h2 className="text-lg font-bold text-slate-900">
-                      Project Overview
-                    </h2>
-                  </div>
-                  <button
-                    onClick={handleOpenAssignAgentYPreview}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2.5 transition-colors"
-                  >
-                    <Send size={15} />
-                    Assign Agent Y
-                  </button>
-                </div>
+                
 
                 {/* Project Header */}
                 <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border p-5 mb-6">
@@ -1071,10 +1096,10 @@ const router=useRouter()
                     icon={<TrendingUp size={14} className="text-blue-600" />}
                   >
                     <p className="text-sm font-semibold text-slate-900 mb-2">
-                      Step {flow.currentStep + 1} of {flow.steps.length}
+                      Step {currentStep + 1} of {flow.steps.length}
                     </p>
                     <p className="text-xs text-slate-500 mb-3">
-                      {flow.steps[flow.currentStep]?.label ?? "In progress"}
+                      {flow.steps[currentStep]?.label ?? "In progress"}
                     </p>
                     <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
                       <div className="h-full bg-blue-600" style={{ width: `${progressValue}%` }} />
@@ -1287,11 +1312,60 @@ const router=useRouter()
             )}
 
             {activeSection === "documents" && (
-              <div className="rounded-xl border bg-slate-50 p-6 text-center">
-                <p className="text-sm font-semibold text-slate-900">Documents moved to separate pages.</p>
-                <Link href={`/projects/${id}/workspace/agent-y-documents`} className="inline-flex mt-3 text-sm text-blue-600 hover:text-blue-700 font-semibold">
-                  Open Agent Y Documents
-                </Link>
+              <div className="space-y-4">
+                <div className="rounded-xl border bg-slate-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-slate-600">Document Actions</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRequestDocuments}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+                    >
+                      <Send size={13} />
+                      Send to Client
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                    >
+                      <Upload size={13} />
+                      Upload Manually
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-white p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-bold text-slate-900">Required Documents</p>
+                    <span className="text-[11px] text-slate-500">
+                      {requiredForCustomer.length} item{requiredForCustomer.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {requiredForCustomer.length === 0 ? (
+                    <p className="text-xs text-slate-500">No required documents yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {requiredForCustomer.map((doc) => (
+                        <div key={doc.id} className="rounded-lg border bg-slate-50 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-semibold text-slate-800">{doc.name}</p>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                doc.required ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {doc.required ? "Required" : "Optional"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">{doc.description}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            Allowed: {doc.allowedFileTypes.join(", ")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
 
