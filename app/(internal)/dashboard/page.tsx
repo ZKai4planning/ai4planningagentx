@@ -175,8 +175,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 sm:px-6 lg:px-10 py-6 sm:py-8 space-y-6">
-      <section className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-10 border-y bg-white/95 backdrop-blur-sm px-4 sm:px-6 lg:px-10 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        {/* <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-slate-900">Main Dashboard Header</p>
             <p className="text-xs text-slate-500">Aligned quick access and cross-channel notifications</p>
@@ -227,7 +227,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* <div className="mt-3 flex flex-wrap items-center gap-2">
           <Link href="/projects" className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">

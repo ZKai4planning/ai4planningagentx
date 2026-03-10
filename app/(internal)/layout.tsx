@@ -59,7 +59,7 @@ export default function DashboardLayout({
       </Suspense>
 
       <div className="flex-1 overflow-y-auto">
-        <header className="border-b bg-white px-4 sm:px-6 lg:px-10 py-3 h-18">
+        <header className="sticky top-0 border-b bg-white px-4 sm:px-6 lg:px-10 py-3 h-18">
           <div className="flex items-end justify-end gap-3">
             {/* <div>
               <p className="text-sm font-semibold text-slate-900">{displayName}</p>
