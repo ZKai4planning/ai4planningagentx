@@ -60,6 +60,11 @@ const defaultMenu: MenuItem[] = [
     icon: FolderKanban,
     href: "/projects",
   },
+  {
+    label: "Logout",
+    icon: LogOut,
+    href: "/login",
+  },
   // {
   //   label: "Submit to Agent Y",
   //   icon: Send,
@@ -222,7 +227,7 @@ export default function Sidebar({
               A
             </div>
             <span className="font-semibold text-slate-900">
-              AI4 Planning
+              AI4Planning
             </span>
           </div>
         )}
@@ -360,7 +365,7 @@ export default function Sidebar({
         <div className="border-t px-4 py-4">
           <div className="rounded-xl bg-slate-50 px-4 py-3">
             <p className="text-xs text-slate-500">
-              Good Afternoon
+              Wel come back,
             </p>
             <p className="text-sm font-semibold text-slate-900">
               {displayName}

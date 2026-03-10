@@ -269,9 +269,9 @@ export default function EmployeeProfilePage() {
               Manage your profile details and profile picture.
             </p>
           </div>
-          <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
+          {/* <div className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
             User ID: {userId ?? "Unavailable"}
-          </div>
+          </div> */}
         </div>
 
         {loading ? (

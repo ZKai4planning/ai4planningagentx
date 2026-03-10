@@ -59,12 +59,12 @@ export default function DashboardLayout({
       </Suspense>
 
       <div className="flex-1 overflow-y-auto">
-        <header className="border-b bg-white px-4 sm:px-6 lg:px-10 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
+        <header className="border-b bg-white px-4 sm:px-6 lg:px-10 py-3 h-18">
+          <div className="flex items-end justify-end gap-3">
+            {/* <div>
               <p className="text-sm font-semibold text-slate-900">{displayName}</p>
               <p className="text-xs text-slate-500">{email ?? "Logged in user"}</p>
-            </div>
+            </div> */}
             <Link
               href="/profile"
               className="rounded-lg border bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
