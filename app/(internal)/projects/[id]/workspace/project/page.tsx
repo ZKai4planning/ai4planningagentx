@@ -48,31 +48,22 @@ import { useRouter } from "next/navigation"
 import {
   customer,
   formSubmission,
-  flow,
+  getMockWorkspaceRoadmap,
   project,
   quote,
   requirements,
+  workspaceRoadmapMockResponse,
+} from "./workspaceData"
+import type {
+  WorkspaceRoadmapResponse,
+  WorkspaceRoadmapStage,
+  WorkspaceSectionId as SectionId,
 } from "./workspaceData"
 
 
 
 
 
-
-type SectionId =
-  | "coordination"
-  | "requirements"
-  | "quote"
-  | "documents"
-  | "communication"
-  | "profile"
-  | "payments"
-  | "notes"
-  | "project"
-  | "submission"
-  | "dimensions"
-  | "constraints"
-  | "consultation"
 
 interface CoordinationTask {
   id: string
@@ -147,6 +138,19 @@ function getInitialSection(sectionParam: string | null): SectionId {
   return "project"
 }
 
+function buildStageWorkspaceUrl(projectId: string, stage: WorkspaceRoadmapStage) {
+  const params = new URLSearchParams({ section: stage.opensSection })
+  if (stage.queryStep) {
+    params.set("step", stage.queryStep)
+  }
+  return `/projects/${projectId}/workspace/project?${params.toString()}`
+}
+
+function resolveRoadmapHref(hrefTemplate: string, projectId?: string) {
+  if (!projectId) return null
+  return hrefTemplate.replace(":projectId", encodeURIComponent(projectId))
+}
+
 /* ─────────────────────────────────────────────
    PAGE
 ───────────────────────────────────────────── */
@@ -180,49 +184,63 @@ export default function UserDetailsPage() {
   const [coordinationTasks, setCoordinationTasks] = useState<CoordinationTask[]>(
     INITIAL_COORDINATION_TASKS
   )
-  const [currentStep, setCurrentStep] = useState(flow.currentStep)
+  const [roadmap, setRoadmap] = useState<WorkspaceRoadmapResponse>(
+    workspaceRoadmapMockResponse
+  )
+  const [currentStageId, setCurrentStageId] = useState(
+    workspaceRoadmapMockResponse.currentStageId
+  )
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const router = useRouter()
-
-  const checklistStepIndex = flow.steps.findIndex((step) => step.label === "Received Checklist")
-  const quoteStepIndex = flow.steps.findIndex((step) => step.label === "Quote Raised")
-  const paymentStepIndex = flow.steps.findIndex((step) => step.label === "70% Payment Received")
-  const documentStepIndex = flow.steps.findIndex(
-    (step) => step.label === "Document Collection and Review"
+  const roadmapStages = roadmap.stages
+  const currentStepIndex = roadmapStages.findIndex(
+    (stage) => stage.id === currentStageId
   )
-  const handoverStepIndex = flow.steps.findIndex(
-    (step) => step.label === "Project Handed Over to Agent Y"
-  )
+  const currentStep = currentStepIndex >= 0 ? currentStepIndex : 0
+  const activeRoadmapStage = roadmapStages[currentStep]
 
+  useEffect(() => {
+    let active = true
+
+    const loadRoadmap = async () => {
+      const response = await getMockWorkspaceRoadmap()
+      if (!active) return
+      setRoadmap(response)
+    }
+
+    void loadRoadmap()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     setActiveSection(selectedSection)
   }, [selectedSection])
 
   useEffect(() => {
-    if (!stepParam) return
-    if (stepParam === "checklist" && checklistStepIndex >= 0) {
-      setCurrentStep(checklistStepIndex)
-      return
+    const currentStageExists = roadmapStages.some(
+      (stage) => stage.id === currentStageId
+    )
+    if (!currentStageExists) {
+      setCurrentStageId(roadmap.currentStageId)
     }
-    if (stepParam === "quote" && quoteStepIndex >= 0) {
-      setCurrentStep(quoteStepIndex)
-      return
-    }
-    if (stepParam === "payment" && paymentStepIndex >= 0) {
-      setCurrentStep(paymentStepIndex)
-      return
-    }
-    if (stepParam === "documents" && documentStepIndex >= 0) {
-      setCurrentStep(documentStepIndex)
-    }
-  }, [stepParam, checklistStepIndex, quoteStepIndex, paymentStepIndex, documentStepIndex])
+  }, [currentStageId, roadmap.currentStageId, roadmapStages])
 
   useEffect(() => {
-    if (flow.steps[currentStep]?.label !== "Received Checklist") return
+    if (!stepParam) return
+    const matchedStage = roadmapStages.find((stage) => stage.queryStep === stepParam)
+    if (matchedStage) {
+      setCurrentStageId(matchedStage.id)
+    }
+  }, [roadmapStages, stepParam])
+
+  useEffect(() => {
+    if (activeRoadmapStage?.id !== "received-checklist") return
     if (documentState.checklist.length > 0) return
     loadChecklistFromAgentY()
-  }, [currentStep, documentState.checklist.length, loadChecklistFromAgentY])
+  }, [activeRoadmapStage?.id, documentState.checklist.length, loadChecklistFromAgentY])
 
   useEffect(() => {
     if (!pendingDocRequest) return
@@ -240,28 +258,34 @@ export default function UserDetailsPage() {
     markReceivedFromAgentY,
   ])
 
-  const handleAdvanceToQuote = () => {
-    if (quoteStepIndex < 0) return
-    setCurrentStep(quoteStepIndex)
-    setActiveSection("quote")
+  const openStage = (stage: WorkspaceRoadmapStage) => {
+    setCurrentStageId(stage.id)
+    setActiveSection(stage.opensSection)
     if (projectId) {
-      router.push(`/projects/${projectId}/workspace/project?section=quote`)
+      router.push(buildStageWorkspaceUrl(projectId, stage))
     }
   }
 
-  const handleAdvanceToPayment = () => {
-    if (paymentStepIndex < 0) return
-    setCurrentStep(paymentStepIndex)
-    setActiveSection("payments")
-    if (projectId) {
-      router.push(`/projects/${projectId}/workspace/project?section=payments`)
-    }
-  }
+  const handleAdvanceAction = () => {
+    const action = activeRoadmapStage?.action
+    if (!action) return
 
-  const handleAdvanceToDocuments = () => {
-    setActiveSection("documents")
-    if (projectId) {
-      router.push(`/projects/${projectId}/workspace/agent-y-documents`)
+    if (action.type === "activate-stage") {
+      const targetStage = roadmapStages.find(
+        (stage) => stage.id === action.targetStageId
+      )
+      if (!targetStage) return
+      openStage(targetStage)
+      return
+    }
+
+    if (action.targetSection) {
+      setActiveSection(action.targetSection)
+    }
+
+    const nextHref = resolveRoadmapHref(action.hrefTemplate, projectId)
+    if (nextHref) {
+      router.push(nextHref)
     }
   }
 
@@ -279,29 +303,9 @@ export default function UserDetailsPage() {
   }
 
   const handleStepSelect = (index: number) => {
-    setCurrentStep(index)
-    const label = flow.steps[index]?.label
-    if (label === "Received Checklist") {
-      setActiveSection("documents")
-      return
-    }
-    if (label === "Quote Raised") {
-      setActiveSection("quote")
-      return
-    }
-    if (label === "70% Payment Received") {
-      setActiveSection("payments")
-      return
-    }
-    if (label === "Document Collection and Review") {
-      setActiveSection("documents")
-      return
-    }
-    if (label === "Council Submission") {
-      setActiveSection("submission")
-      return
-    }
-    setActiveSection("project")
+    const stage = roadmapStages[index]
+    if (!stage) return
+    openStage(stage)
   }
 
   const handleOpenAssignAgentYPreview = () => {
@@ -340,15 +344,18 @@ export default function UserDetailsPage() {
     )
   }
 
-  const progressValue = Math.round((currentStep / (flow.steps.length - 1)) * 100)
+  const progressValue =
+    roadmapStages.length > 1
+      ? Math.round((currentStep / (roadmapStages.length - 1)) * 100)
+      : 0
   const checklistLoaded = documentState.checklist.length > 0
   const requiredChecklistNames = documentState.checklist
     .filter((doc) => doc.required)
     .map((doc) => doc.name)
-  const journeySteps = flow.steps.map((step) =>
-    step.label === "Received Checklist"
+  const journeySteps = roadmapStages.map((stage) =>
+    stage.id === "received-checklist"
       ? {
-          ...step,
+          ...stage,
           details: requiredChecklistNames,
           desc: !checklistLoaded
             ? "Checklist pending from Agent Y."
@@ -356,7 +363,7 @@ export default function UserDetailsPage() {
             ? "Checklist received. Required documents listed below."
             : "Checklist received. No required documents flagged.",
         }
-      : step
+      : stage
   )
   const sectionMeta: Record<SectionId, { title: string; hint: string }> = {
     project: {
@@ -419,13 +426,9 @@ export default function UserDetailsPage() {
       <CustomerJourney
       steps={journeySteps}
       currentStep={currentStep}
-      showAdvance={
-        currentStep === checklistStepIndex ||
-        currentStep === quoteStepIndex ||
-        currentStep === paymentStepIndex
-      }
+      showAdvance={Boolean(activeRoadmapStage?.action)}
       calloutActions={
-        currentStep === handoverStepIndex ? (
+        activeRoadmapStage?.callout === "assign-agent-y" ? (
           <button
             type="button"
             onClick={agentYAssigned ? undefined : handleOpenAssignAgentYPreview}
@@ -441,20 +444,8 @@ export default function UserDetailsPage() {
           </button>
         ) : null
       }
-      advanceLabel={
-        currentStep === quoteStepIndex
-          ? "Mark 70% Payment Received"
-          : currentStep === paymentStepIndex
-          ? "Open Documents"
-          : "Raise Quote"
-      }
-      onAdvance={
-        currentStep === quoteStepIndex
-          ? handleAdvanceToPayment
-          : currentStep === paymentStepIndex
-          ? handleAdvanceToDocuments
-          : handleAdvanceToQuote
-      }
+      advanceLabel={activeRoadmapStage?.action?.label ?? "Advance"}
+      onAdvance={handleAdvanceAction}
       onStepSelect={handleStepSelect}
     />
 
@@ -1096,10 +1087,10 @@ export default function UserDetailsPage() {
                     icon={<TrendingUp size={14} className="text-blue-600" />}
                   >
                     <p className="text-sm font-semibold text-slate-900 mb-2">
-                      Step {currentStep + 1} of {flow.steps.length}
+                      Step {currentStep + 1} of {roadmapStages.length}
                     </p>
                     <p className="text-xs text-slate-500 mb-3">
-                      {flow.steps[currentStep]?.label ?? "In progress"}
+                      {activeRoadmapStage?.label ?? "In progress"}
                     </p>
                     <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
                       <div className="h-full bg-blue-600" style={{ width: `${progressValue}%` }} />

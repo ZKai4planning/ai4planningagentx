@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { Bell, TrendingUp, Video } from "lucide-react"
 import { useDocumentMediation } from "@/app/(internal)/projects/[id]/workspace/documents/store"
-import { customer, formSubmission, flow, project } from "@/app/(internal)/projects/[id]/workspace/project/workspaceData"
+import {
+  customer,
+  formSubmission,
+  project,
+  workspaceRoadmapMockResponse,
+} from "@/app/(internal)/projects/[id]/workspace/project/workspaceData"
 
 type WorkspaceHeaderProps = {
   projectId: string
@@ -17,7 +22,17 @@ export default function WorkspaceHeader({ projectId }: WorkspaceHeaderProps) {
   const { logs } = useDocumentMediation(projectId ?? "unknown-project")
   const prevNotifCountRef = useRef(0)
 
-  const progressValue = Math.round((flow.currentStep / (flow.steps.length - 1)) * 100)
+  const currentStep = workspaceRoadmapMockResponse.stages.findIndex(
+    (stage) => stage.id === workspaceRoadmapMockResponse.currentStageId
+  )
+  const progressValue =
+    workspaceRoadmapMockResponse.stages.length > 1
+      ? Math.round(
+          (Math.max(currentStep, 0) /
+            (workspaceRoadmapMockResponse.stages.length - 1)) *
+            100
+        )
+      : 0
   const missingDocsSentLog = logs.find((log) => log.action === "Missing documents sent to Agent X")
   const requiredDocsSentLog = logs.find((log) => log.action === "Required documents sent to Agent Y")
   const agentYSubmittedLogs = logs.filter((log) => log.action === "Agent Y submitted missing document")
