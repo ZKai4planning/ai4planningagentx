@@ -288,7 +288,7 @@
 
 
 
- 
+
 
 "use client";
 
@@ -297,7 +297,7 @@ import { useRouter } from "next/navigation";
 import type React from "react";
 import { FcGoogle } from "react-icons/fc";
 import axiosInstance from "@/lib/axiosinstance";
-import {  EyeIcon, EyeOffIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useAuthStore } from "@/lib/zustand"
 
 
@@ -306,8 +306,8 @@ import { useAuthStore } from "@/lib/zustand"
 
 
 export default function ClientLogin() {
- const router = useRouter();
- const loginRegion = "uk";
+  const router = useRouter();
+  const loginRegion = "uk";
 
   const [step, setStep] = useState<"SUBMIT" | "VERIFY_OTP">("SUBMIT");
   const [email, setEmail] = useState("");
@@ -337,13 +337,13 @@ export default function ClientLogin() {
     setPassword(e.target.value);
     resetErrorState();
   };
-const resetErrorState = () => {
-  setErrorMessage(null);
-  setRemainingAttempts(null);
-  setLockedHours(null);
-  setIsLocked(false);
-  setSuccessMessage(null); // 👈 add this
-};
+  const resetErrorState = () => {
+    setErrorMessage(null);
+    setRemainingAttempts(null);
+    setLockedHours(null);
+    setIsLocked(false);
+    setSuccessMessage(null); // 👈 add this
+  };
 
 
   /* =========================
@@ -446,24 +446,24 @@ const resetErrorState = () => {
     }
   };
 
-const handleResendOtp = async () => {
-  setResending(true);
-  setErrorMessage(null);
-  setSuccessMessage(null);
+  const handleResendOtp = async () => {
+    setResending(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-  try {
-    await axiosInstance.post("/employee/auth/resend-otp", { email });
+    try {
+      await axiosInstance.post("/employee/auth/resend-otp", { email });
 
-    // ✅ SUCCESS MESSAGE
-    setSuccessMessage("OTP sent successfully");
-  } catch (err: any) {
-    setErrorMessage(
-      err?.response?.data?.message || "Failed to resend OTP"
-    );
-  } finally {
-    setTimeout(() => setResending(false), 3000);
-  }
-};
+      // ✅ SUCCESS MESSAGE
+      setSuccessMessage("OTP sent successfully");
+    } catch (err: any) {
+      setErrorMessage(
+        err?.response?.data?.message || "Failed to resend OTP"
+      );
+    } finally {
+      setTimeout(() => setResending(false), 3000);
+    }
+  };
 
 
   return (
@@ -471,22 +471,22 @@ const handleResendOtp = async () => {
       {/* Header */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-           Sign In
+          Sign In
         </h2>
       </div>
 
-      {step === "SUBMIT" && (
+      {/* {step === "SUBMIT" && (
         <button
           type="button"
-         
+
           className="w-full flex items-center justify-center gap-2 border border-slate-300 dark:border-slate-700 rounded-lg py-3 mb-6 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
         >
           <FcGoogle size={20} />
           <span className="text-sm font-medium text-slate-700 dark:text-white">
             Continue with Google
           </span>
-        </button> 
-      )}
+        </button>
+      )} */}
 
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div className="group">
@@ -516,26 +516,39 @@ const handleResendOtp = async () => {
               Password
             </label>
             <div className="relative">
- <input
-              type={showPassword ? "text" : "password"}
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="w-full h-14 px-4 rounded-lg
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full h-14 px-4 rounded-lg
                 bg-slate-50 dark:bg-slate-800/50
                 border border-slate-200 dark:border-slate-700
                 text-slate-900 dark:text-white
                 focus:ring-2 focus:ring-primary focus:border-primary
                 transition-all"
-            />
-           {
-  showPassword ? (  < EyeOffIcon className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer" onClick={() => setShowPassword(false)} />)
-  : ( <EyeIcon className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer" onClick={() => setShowPassword(true)} />)
-           } 
+              />
+              {
+                showPassword ? (< EyeOffIcon className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer" onClick={() => setShowPassword(false)} />)
+                  : (<EyeIcon className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer" onClick={() => setShowPassword(true)} />)
+              }
             </div>
-           
 
+
+          </div>
+        )}
+
+        {/* 🔹 Forgot Password (Independent) */}
+        {step === "SUBMIT" && (
+          <div className="text-right">
+            <button
+              type="button"
+              onClick={() => router.push("/forgot-password")}
+              className="text-xs font-semibold text-blue-600 hover:underline"
+            >
+              Forgot Password?
+            </button>
           </div>
         )}
 
@@ -609,11 +622,10 @@ const handleResendOtp = async () => {
         {/* ERROR MESSAGE */}
         {errorMessage && (
           <div
-            className={`rounded-lg p-3 text-sm ${
-              isLocked
+            className={`rounded-lg p-3 text-sm ${isLocked
                 ? "bg-red-100 text-red-700"
                 : "bg-yellow-100 text-yellow-700"
-            }`}
+              }`}
           >
             <p>{errorMessage}</p>
 
@@ -632,10 +644,10 @@ const handleResendOtp = async () => {
         )}
 
         {successMessage && (
-  <div className="rounded-lg p-3 text-sm bg-green-100 text-green-700">
-    {successMessage}
-  </div>
-)}
+          <div className="rounded-lg p-3 text-sm bg-green-100 text-green-700">
+            {successMessage}
+          </div>
+        )}
 
         {/* SUBMIT BUTTON (NEVER BLOCKED) */}
 

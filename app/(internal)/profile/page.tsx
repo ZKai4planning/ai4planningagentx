@@ -187,7 +187,7 @@ export default function EmployeeProfilePage() {
     setIsSaving(true)
 
     try {
-      const payload = { name, email, phoneNumber }
+      const payload = { name, phoneNumber }
       const response = await axiosInstance.put(
         `/employee/profile/${encodeURIComponent(userId)}`,
         payload
@@ -203,7 +203,7 @@ export default function EmployeeProfilePage() {
       } else {
         setProfile((prev) =>
           prev
-            ? { ...prev, name: payload.name, email: payload.email, phoneNumber: payload.phoneNumber }
+            ? { ...prev, name: payload.name, phoneNumber: payload.phoneNumber }
             : prev
         )
         setProfileName(payload.name)
@@ -339,11 +339,11 @@ export default function EmployeeProfilePage() {
                   <label className="text-xs font-medium text-slate-600">Email</label>
                   <input
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
                     type="email"
                     required
                     placeholder="Enter email"
-                    className="w-full rounded-lg border px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500"
+                    disabled
+                    className="w-full rounded-lg border bg-slate-100 px-3 py-2.5 text-sm text-slate-500 outline-none"
                   />
                 </div>
 
