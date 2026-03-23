@@ -1,13 +1,19 @@
 "use client";
 
+import { AxiosError } from "axios";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import axiosInstance from "@/lib/axiosinstance";
 
+type PasswordResetRequestResponse = {
+  success: boolean;
+  message: string;
+};
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
 
   const router = useRouter();
@@ -17,25 +23,37 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
     setError("");
+    setSuccessMessage("");
 
     try {
-      await axiosInstance.post("/admin/password-requests", {
-        email,
-      });
+      const response = await axiosInstance.post<PasswordResetRequestResponse>(
+        "/admin/password-requests",
+        {
+          email: email.trim().toLowerCase(),
+        }
+      );
 
-      setSuccess(true);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Failed to send request.");
+      }
+
+      setSuccessMessage(response.data.message);
       setEmail("");
 
-      // Redirect to login page after 1.5 seconds
       setTimeout(() => {
-        router.push("/login"); // change if your route is different
-      }, 1500);
+        router.push("/login");
+      }, 5000);
 
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-        "Failed to send request. Please try again."
-      );
+    } catch (err: unknown) {
+      const errorMessage =
+        (err instanceof AxiosError
+          ? (err.response?.data as PasswordResetRequestResponse | undefined)
+              ?.message
+          : "") ||
+        (err instanceof Error ? err.message : "") ||
+        "Failed to send request. Please try again.";
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -65,7 +83,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {/* FORM */}
-        {!success ? (
+        {!successMessage ? (
           <form onSubmit={handleSubmit} className="space-y-4">
             
             {/* EMAIL INPUT */}
@@ -107,7 +125,8 @@ export default function ForgotPasswordPage() {
         ) : (
           /* SUCCESS MESSAGE */
           <div className="text-sm text-green-700 bg-green-50 p-4 rounded-lg">
-            Your request has been sent. Redirecting to login page...
+            <p>{successMessage}</p>
+            <p className="mt-2 text-green-600">Redirecting to login page...</p>
           </div>
         )}
       </div>
