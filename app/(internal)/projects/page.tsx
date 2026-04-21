@@ -19,7 +19,7 @@ type ApiService = {
 type ApiProject = {
   _id: string
   projectId: string
-  status: string
+  status?: string
   createdAt: string
   updatedAt: string
   clientName?: string
@@ -81,7 +81,8 @@ function formatDate(value: string) {
   }).format(date)
 }
 
-function formatStatusLabel(value: string) {
+function formatStatusLabel(value: string | undefined) {
+  if (!value) return "Unknown";
   return value
     .split("_")
     .filter(Boolean)
@@ -107,19 +108,21 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
     name: project.clientName || project.clientDetails?.fullName || "-",
     service: service || "-",
     description: description || "-",
-    status: project.status,
+    status: project.status || "unknown",
     createdOn: formatDate(project.createdAt),
   }
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const tone =
-    {
-      eligibility_in_progress: "bg-amber-50 text-amber-700",
-      active: "bg-blue-50 text-blue-700",
-      completed: "bg-emerald-50 text-emerald-700",
-      cancelled: "bg-rose-50 text-rose-700",
-    }[status] ?? "bg-slate-100 text-slate-700"
+function StatusBadge({ status }: { status: string | undefined }) {
+  const tone = status
+    ? {
+        eligibility_in_progress: "bg-amber-50 text-amber-700",
+        active: "bg-blue-50 text-blue-700",
+        completed: "bg-emerald-50 text-emerald-700",
+        cancelled: "bg-rose-50 text-rose-700",
+        unknown: "bg-slate-100 text-slate-700",
+      }[status] ?? "bg-slate-100 text-slate-700"
+    : "bg-slate-100 text-slate-700"
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-medium ${tone}`}>
