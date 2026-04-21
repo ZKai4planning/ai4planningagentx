@@ -1,184 +1,304 @@
 "use client"
 
+import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { FolderKanban, Eye } from "lucide-react"
 import DataTable, { Column } from "@/components/datatable"
+import axiosInstance from "@/lib/axiosinstance"
 
-/* ================= TYPES ================= */
+type ApiService = {
+  _id: string
+  serviceId: string
+  title: string
+  serviceName: string
+  description: string
+  image?: string
+  status?: boolean
+}
 
-type ProjectStage =
-  | "Pre-Planning"
-  | "progress"
-  | "Council Submission"
+type ApiProject = {
+  _id: string
+  projectId: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  clientName?: string
+  services?: ApiService[]
+  clientDetails?: {
+    _id: string
+    userId: string
+    email?: string
+    fullName?: string
+  } | null
+}
+
+type ApiPagination = {
+  totalItems: number
+  currentPage: number
+  totalPages: number
+  pageSize: number
+  hasNextPage: boolean
+  hasPrevPage: boolean
+}
+
+type ProjectsResponse = {
+  success?: boolean
+  message?: string
+  data?: ApiProject[]
+  pagination?: ApiPagination
+}
 
 type ProjectRow = {
   id: string
   projectId: string
+  name: string
   service: string
-  stage: ProjectStage
-  progress: number
-  assignedBy: string
-  assignedOn: string
-  isActive: boolean
+  description: string
+  status: string
+  createdOn: string
 }
 
-/* ================= MOCK DATA ================= */
-/* Appears ONLY after Agent X assigns project */
+const DEFAULT_PAGINATION: ApiPagination = {
+  totalItems: 0,
+  currentPage: 1,
+  totalPages: 1,
+  pageSize: 10,
+  hasNextPage: false,
+  hasPrevPage: false,
+}
 
-const activeProjects: ProjectRow[] = [
-  {
-    id: "PROJ-UK-7842",
-    projectId: "PROJ-UK-7842",
-    service: "Householder Planning Consent",
-    stage: "Pre-Planning",
-    progress: 70,
-    assignedBy: "Agent X",
-    assignedOn: "12 Feb 2026",
-    isActive: true,
-  },
-  {
-    id: "PROJ-UK-7911",
-    projectId: "PROJ-UK-7911",
-    service: "Planning Appeal Support",
-    stage: "progress",
-    progress: 40,
-    assignedBy: "Agent X",
-    assignedOn: "10 Feb 2026",
-    isActive: true,
-  },
-]
+function formatDate(value: string) {
+  const date = new Date(value)
 
-/* ================= HELPERS ================= */
-
-function StageBadge({ stage }: { stage: ProjectStage }) {
-  const styles: Record<ProjectStage, string> = {
-    "Pre-Planning": "bg-blue-50 text-blue-700",
-    "progress": "bg-amber-50 text-amber-700",
-    "Council Submission": "bg-emerald-50 text-emerald-700",
+  if (Number.isNaN(date.getTime())) {
+    return "-"
   }
 
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date)
+}
+
+function formatStatusLabel(value: string) {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+function mapProjectToRow(project: ApiProject): ProjectRow {
+  const services = project.services ?? []
+  const service = services
+    .map((item) => item.serviceName || item.title)
+    .filter(Boolean)
+    .join(", ")
+
+  const description = services
+    .map((item) => item.description)
+    .filter(Boolean)
+    .join(" | ")
+
+  return {
+    id: project._id,
+    projectId: project.projectId,
+    name: project.clientName || project.clientDetails?.fullName || "-",
+    service: service || "-",
+    description: description || "-",
+    status: project.status,
+    createdOn: formatDate(project.createdAt),
+  }
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const tone =
+    {
+      eligibility_in_progress: "bg-amber-50 text-amber-700",
+      active: "bg-blue-50 text-blue-700",
+      completed: "bg-emerald-50 text-emerald-700",
+      cancelled: "bg-rose-50 text-rose-700",
+    }[status] ?? "bg-slate-100 text-slate-700"
+
   return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-medium ${styles[stage]}`}
-    >
-      {stage}
+    <span className={`rounded-full px-3 py-1 text-xs font-medium ${tone}`}>
+      {formatStatusLabel(status)}
     </span>
   )
 }
 
-/* ================= COLUMNS ================= */
+export default function ProjectsPage() {
+  const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [pagination, setPagination] = useState<ApiPagination>(DEFAULT_PAGINATION)
+  const [error, setError] = useState<string | null>(null)
 
-const columns: Column<ProjectRow>[] = [
-  {
-    key: "sno",
-    label: "#",
-    width: "60px",
-    sticky: true,
-    left: 0,
-    render: (_, __, index, startIndex) => startIndex + index + 1,
-  },
+  const deferredSearch = useDeferredValue(search)
 
-  {
-    key: "projectId",
-    label: "Project",
-    sortable: true,
-    render: (value, row) => (
-      <div className="space-y-0.5">
-        <p className="font-semibold text-slate-900">{value}</p>
-        <p className="text-xs text-slate-500">
-          Assigned {row.assignedOn} · {row.assignedBy}
-        </p>
-      </div>
-    ),
-  },
+  useEffect(() => {
+    const fetchProjects = async () => {
+      setLoading(true)
 
-  {
-    key: "service",
-    label: "Service",
-    sortable: true,
-    render: (value) => (
-      <p className="text-sm font-medium text-slate-800">
-        {value}
-      </p>
-    ),
-  },
+      try {
+        const response = await axiosInstance.get<ProjectsResponse>("/projects/all", {
+          params: {
+            page,
+            limit,
+            ...(deferredSearch.trim() ? { search: deferredSearch.trim() } : {}),
+          },
+        })
 
-  {
-    key: "stage",
-    label: "Stage",
-    sortable: true,
-    render: (value) => <StageBadge stage={value} />,
-  },
+        const payload = response.data
+        const nextPagination = payload.pagination ?? {
+          ...DEFAULT_PAGINATION,
+          currentPage: page,
+          pageSize: limit,
+        }
 
-  {
-    key: "progress",
-    label: "Progress",
-    sortable: true,
-    render: (value) => (
-      <div className="flex items-center gap-2">
-        <div className="h-2 w-28 rounded-full bg-slate-200 overflow-hidden">
-          <div
-            className="h-full bg-blue-600 transition-all"
-            style={{ width: `${value}%` }}
-          />
-        </div>
-        <span className="text-xs font-medium text-slate-600">
-          {value}%
-        </span>
-      </div>
-    ),
-  },
+        setProjects((payload.data ?? []).map(mapProjectToRow))
+        setPagination(nextPagination)
+        setError(null)
 
-  {
-    key: "actions",
-    label: "Action",
-    align: "right",
-    sticky: true,
-    left: 1100,
-    render: (_, row) => (
-      <Link
-        href={`/projects/${row.projectId}/workspace/project`}
-        className="
-          inline-flex items-center gap-2
-          rounded-lg bg-blue-600 px-4 py-2
-          text-xs font-semibold text-white
-          hover:bg-blue-700 transition
-        "
-      ><Eye size={14} />
-        View Details
-      </Link>
-    ),
-  },
-]
+        if (nextPagination.currentPage !== page) {
+          setPage(nextPagination.currentPage)
+        }
+      } catch (err) {
+        setProjects([])
+        setPagination({
+          ...DEFAULT_PAGINATION,
+          currentPage: page,
+          pageSize: limit,
+        })
+        setError("Unable to load projects right now.")
+        console.error("Failed to fetch projects", err)
+      } finally {
+        setLoading(false)
+      }
+    }
 
-/* ================= PAGE ================= */
+    void fetchProjects()
+  }, [deferredSearch, limit, page])
 
-export default function ActiveProjectsPage() {
+  const columns = useMemo<Column<ProjectRow>[]>(() => [
+    {
+      key: "sno",
+      label: "#",
+      width: "64px",
+      align: "center",
+      render: (_, __, index, startIndex) => startIndex + index + 1,
+    },
+    {
+      key: "projectId",
+      label: "Project ID",
+      sortable: true,
+      width: "160px",
+      render: (value) => (
+        <span className="font-semibold text-slate-900">{value}</span>
+      ),
+    },
+    {
+      key: "name",
+      label: "Name",
+      sortable: true,
+      width: "180px",
+      render: (value) => (
+        <span className="font-medium text-slate-800">{value}</span>
+      ),
+    },
+    {
+      key: "service",
+      label: "Service",
+      sortable: true,
+      width: "220px",
+      render: (value) => (
+        <p className="text-sm text-slate-700">{value}</p>
+      ),
+    },
+    {
+      key: "description",
+      label: "Description",
+      width: "360px",
+      render: (value) => (
+        <p className="line-clamp-2 text-sm text-slate-600">{value}</p>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      sortable: true,
+      width: "180px",
+      render: (value) => <StatusBadge status={value} />,
+    },
+    {
+      key: "createdOn",
+      label: "Created On",
+      sortable: true,
+      width: "140px",
+    },
+    {
+      key: "actions",
+      label: "Action",
+      align: "right",
+      width: "150px",
+      render: (_, row) => (
+        <Link
+          href={`/projects/${row.projectId}/workspace/project`}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+        >
+          <Eye size={14} />
+          View Details
+        </Link>
+      ),
+    },
+  ], [])
+
+  const subtitle = error ?? "Projects fetched from /projects/all"
+
   return (
-    <div className="flex flex-col gap-6 max-w-8xl mx-auto px-10 py-6">
-
-      {/* HEADER */}
+    <div className="mx-auto flex max-w-8xl flex-col gap-6 px-10 py-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            Active Projects
-          </h1>
-          <p className="text-sm text-slate-500">
-            Projects currently assigned to you
+          <h1 className="text-2xl font-semibold text-slate-900">Projects</h1>
+          <p className={`text-sm ${error ? "text-rose-600" : "text-slate-500"}`}>
+            {subtitle}
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <FolderKanban size={16} />
-          {activeProjects.length} Active
+          {pagination.totalItems} Total
         </div>
       </div>
 
-      {/* TABLE */}
       <DataTable<ProjectRow>
-        data={activeProjects}
+        data={projects}
         columns={columns}
-    
+        loading={loading}
+        serverSide
+        searchValue={search}
+        onSearchChange={(value) => {
+          setSearch(value)
+          setPage(1)
+        }}
+        searchPlaceholder="Search projects..."
+        currentPage={page}
+        onPageChange={setPage}
+        rowsPerPage={limit}
+        onRowsPerPageChange={(value) => {
+          setLimit(value)
+          setPage(1)
+        }}
+        totalItems={pagination.totalItems}
+        totalPages={pagination.totalPages}
+        emptyMessage={
+          error
+            ? "Projects could not be loaded."
+            : "No projects matched your search."
+        }
       />
     </div>
   )

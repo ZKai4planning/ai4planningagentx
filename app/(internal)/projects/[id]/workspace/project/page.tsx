@@ -4,6 +4,7 @@ import Link from "next/link"
 import SendToAgentAnimation from "@/components/SendToAgentAnimation"
 import { useParams, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
+import axiosInstance from "@/lib/axiosinstance"
 import { useDocumentMediation } from "../documents/store"
 import {
   Phone,
@@ -46,13 +47,8 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import {
-  customer,
-  formSubmission,
-  getMockWorkspaceRoadmap,
-  project,
-  quote,
-  requirements,
-  workspaceRoadmapMockResponse,
+  defaultWorkspaceRoadmap,
+  getWorkspaceRoadmap,
 } from "./workspaceData"
 import type {
   WorkspaceRoadmapResponse,
@@ -61,46 +57,136 @@ import type {
 } from "./workspaceData"
 
 
-
-
-
-
-interface CoordinationTask {
-  id: string
-  title: string
-  owner: "client" | "agentY" | "agentX"
-  due: string
-  priority: "high" | "medium" | "low"
-  done: boolean
+type EligibilityCompletionStep = {
+  step: number
+  key: string
+  label: string
+  completed: boolean
 }
 
-const INITIAL_COORDINATION_TASKS: CoordinationTask[] = [
-  {
-    id: "task-1",
-    title: "Receive missing document request from Agent Y",
-    owner: "agentY",
-    due: "Today",
-    priority: "high",
-    done: true,
-  },
-  {
-    id: "task-2",
-    title: "Request required documents from customer",
-    owner: "agentX",
-    due: "Tomorrow",
-    priority: "high",
-    done: false,
-  },
-  {
-    id: "task-3",
-    title: "Validate uploaded customer documents and pass to Agent Y",
-    owner: "agentX",
-    due: "In 2 days",
-    priority: "medium",
-    done: false,
-  },
-]
+type EligibilityData = {
+  _id: string
+  projectId: string
+  status: string
+  currentStep: number
+  createdAt: string
+  updatedAt: string
+  applicantAndProperty: {
+    agentDetails: {
+      agentAddress: string
+      agentContactEmailPhone: string
+      agentName: string
+      usesPlanningAgent: boolean
+    }
+    applicantDetails: {
+      contactEmailPhone: string
+      fullName: string
+      postcode: string
+      siteAddress: string
+    }
+    propertyAndOwnership: {
+      nearConservationAreaOrListedBuilding: string
+      ownershipStatus: string
+      propertyType: string
+      purposeOfDevelopment: string
+    }
+  }
+  worksAndMaterials: {
+    descriptionOfWorks: {
+      propsedWorksDescription: string
+      existingPropertyWidthM?: number
+      distanceFromBoundaryM?: number
+      existingPropertyHeightM?: number
+      proposedExtensionHeightM?: number
+      proposedExtensionWidthM?: number
+      ridgeOrEavesHeightM?: number
+    }
+    materials: {
+      colourOrFinishNotes: string
+      materialsMatchExisting: string
+      roofMaterials: string
+      wallMaterials: string
+    }
+    plansDrawingsPhotographs?: {
+      locationPlan?: string
+      additionalDrawings?: string
+      existingAndProposedElevations?: string
+      photographsOfSite?: string
+      sitePlan?: string
+    }
+  }
+  siteConstraints: {
+    accessAndParking: {
+      accessOrParkingChanges: string
+      cycleStorageProvisions: string
+      newOrAlteredAccess: string
+    }
+    floodAndEnvironmentalRisk: {
+      isSiteContaminatedLand: string
+      isSiteInFloodRiskArea: string
+      floodRiskAssesmentReport?: string
+    }
+    heritageAndListing: {
+      isInConservationArea: string
+      isListedBuilding: string
+    }
+    preApplicationAdvice: {
+      officerName: string
+      preApplicationAdviceSummary: string
+      preApplicationReferenceNumber: string
+      soughtPreAppAdvice: string
+    }
+    treesHedgesLandscaping: {
+      treeSpecies: string
+      treesWithTPO: string
+      treesWithinFallingDistance: string
+      treeSurveyReport: string
+    }
+  }
+  utilitiesAndConsents: {
+    additionalConsents: string
+    communityConsultation: string
+    ownershipCertificate: {
+      certificateOfOwnership: string
+      ownershipDetails: string
+    }
+    utilitiesAndWaste: {
+      existingWasteArrangements: string
+      renewableEnergyDetails: string
+      renewableEnergyProposals: string
+      sewageOrDrainage: string
+      surfaceWaterDrainage: string
+      waterSupply: string
+    }
+  }
+  declarations: {
+    digitalSignature: {
+      signatoryCapacity: string
+      signatoryFullName: string
+    }
+    reviewDeclarations: {
+      authorityConfirmed: boolean
+      feeAgreementAccepted: boolean
+      informationAccurate: boolean
+      privateRightsAcknowledged: boolean
+      publicDataConsent: boolean
+    }
+  }
+  completionStatus: {
+    totalSteps: number
+    completedSteps: number
+    percentage: number
+    isCompleted: boolean
+    nextStep: number | null
+    steps: EligibilityCompletionStep[]
+  }
+}
 
+type EligibilityResponse = {
+  success?: boolean
+  message?: string
+  data?: EligibilityData
+}
 
 function getInitialSection(sectionParam: string | null): SectionId {
   if (sectionParam === "communication" || sectionParam === "chat") {
@@ -151,6 +237,70 @@ function resolveRoadmapHref(hrefTemplate: string, projectId?: string) {
   return hrefTemplate.replace(":projectId", encodeURIComponent(projectId))
 }
 
+function formatDisplayValue(value?: string | number | boolean | null) {
+  if (value === null || value === undefined) return "-"
+  if (typeof value === "boolean") return value ? "Yes" : "No"
+  if (typeof value === "number") return String(value)
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : "-"
+}
+
+function formatDateValue(value?: string | null) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date)
+}
+
+function formatEligibilityStatus(status?: string | null) {
+  if (!status) return "Eligibility"
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+function buildRoadmapWithEligibility(
+  baseRoadmap: WorkspaceRoadmapResponse,
+  eligibility: EligibilityData | null
+): WorkspaceRoadmapResponse {
+  if (!eligibility) {
+    return baseRoadmap
+  }
+
+  const eligibilityStage: WorkspaceRoadmapStage = {
+    id: "eligibility-check",
+    label: "Eligibility Check",
+    desc: eligibility.completionStatus.isCompleted
+      ? "Eligibility form completed."
+      : `Eligibility form in progress (${eligibility.completionStatus.percentage}% complete).`,
+    opensSection: "project",
+  }
+
+  const stagesWithoutEligibility = baseRoadmap.stages.filter(
+    (stage) => stage.id !== "eligibility-check"
+  )
+  const insertIndex = Math.min(1, stagesWithoutEligibility.length)
+  const stages = [
+    ...stagesWithoutEligibility.slice(0, insertIndex),
+    eligibilityStage,
+    ...stagesWithoutEligibility.slice(insertIndex),
+  ]
+
+  return {
+    currentStageId: eligibility.completionStatus.isCompleted
+      ? baseRoadmap.currentStageId
+      : "eligibility-check",
+    stages,
+  }
+}
+
 /* ─────────────────────────────────────────────
    PAGE
 ───────────────────────────────────────────── */
@@ -181,15 +331,17 @@ export default function UserDetailsPage() {
   ])
   const [showSendAnimation, setShowSendAnimation] = useState(false)
   const [activeSection, setActiveSection] = useState<SectionId>(selectedSection)
-  const [coordinationTasks, setCoordinationTasks] = useState<CoordinationTask[]>(
-    INITIAL_COORDINATION_TASKS
+  const [baseRoadmap, setBaseRoadmap] = useState<WorkspaceRoadmapResponse>(
+    defaultWorkspaceRoadmap
   )
   const [roadmap, setRoadmap] = useState<WorkspaceRoadmapResponse>(
-    workspaceRoadmapMockResponse
+    defaultWorkspaceRoadmap
   )
   const [currentStageId, setCurrentStageId] = useState(
-    workspaceRoadmapMockResponse.currentStageId
+    defaultWorkspaceRoadmap.currentStageId
   )
+  const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
+  const [eligibilityLoading, setEligibilityLoading] = useState(true)
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const router = useRouter()
   const roadmapStages = roadmap.stages
@@ -203,9 +355,9 @@ export default function UserDetailsPage() {
     let active = true
 
     const loadRoadmap = async () => {
-      const response = await getMockWorkspaceRoadmap()
+      const response = await getWorkspaceRoadmap()
       if (!active) return
-      setRoadmap(response)
+      setBaseRoadmap(response)
     }
 
     void loadRoadmap()
@@ -214,6 +366,44 @@ export default function UserDetailsPage() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    let active = true
+
+    const loadEligibility = async () => {
+      if (!projectId) {
+        setEligibilityLoading(false)
+        return
+      }
+
+      setEligibilityLoading(true)
+
+      try {
+        const response = await axiosInstance.get<EligibilityResponse>(
+          `/eligibility/${encodeURIComponent(projectId)}`
+        )
+        if (!active) return
+        setEligibilityData(response.data.data ?? null)
+      } catch {
+        if (!active) return
+        setEligibilityData(null)
+      } finally {
+        if (active) {
+          setEligibilityLoading(false)
+        }
+      }
+    }
+
+    void loadEligibility()
+
+    return () => {
+      active = false
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    setRoadmap(buildRoadmapWithEligibility(baseRoadmap, eligibilityData))
+  }, [baseRoadmap, eligibilityData])
 
   useEffect(() => {
     setActiveSection(selectedSection)
@@ -227,6 +417,16 @@ export default function UserDetailsPage() {
       setCurrentStageId(roadmap.currentStageId)
     }
   }, [currentStageId, roadmap.currentStageId, roadmapStages])
+
+  useEffect(() => {
+    if (
+      !stepParam &&
+      currentStageId === defaultWorkspaceRoadmap.currentStageId &&
+      roadmap.currentStageId !== currentStageId
+    ) {
+      setCurrentStageId(roadmap.currentStageId)
+    }
+  }, [currentStageId, roadmap.currentStageId, stepParam])
 
   useEffect(() => {
     if (!stepParam) return
@@ -336,32 +536,141 @@ export default function UserDetailsPage() {
     setNoteText("")
   }
 
-  const toggleCoordinationTask = (taskId: string) => {
-    setCoordinationTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, done: !task.done } : task
-      )
-    )
-  }
-
   const progressValue =
     roadmapStages.length > 1
       ? Math.round((currentStep / (roadmapStages.length - 1)) * 100)
       : 0
+  const missingDocsSentLog = logs.find(
+    (log) => log.action === "Missing documents sent to Agent X"
+  )
+  const requiredDocsSentLog = logs.find(
+    (log) => log.action === "Required documents sent to Agent Y"
+  )
+  const agentYSubmittedCount = logs.filter(
+    (log) => log.action === "Agent Y submitted missing document"
+  ).length
   const checklistLoaded = documentState.checklist.length > 0
   const requiredChecklistNames = documentState.checklist
     .filter((doc) => doc.required)
     .map((doc) => doc.name)
+  const pendingEligibilitySteps =
+    eligibilityData?.completionStatus.steps
+      .filter((step) => !step.completed)
+      .map((step) => step.label) ?? []
+  const applicantDetails = eligibilityData?.applicantAndProperty.applicantDetails
+  const propertyDetails = eligibilityData?.applicantAndProperty.propertyAndOwnership
+  const agentDetails = eligibilityData?.applicantAndProperty.agentDetails
+  const worksDetails = eligibilityData?.worksAndMaterials.descriptionOfWorks
+  const materialDetails = eligibilityData?.worksAndMaterials.materials
+  const planDetails = eligibilityData?.worksAndMaterials.plansDrawingsPhotographs
+  const siteConstraints = eligibilityData?.siteConstraints
+  const utilitiesAndConsents = eligibilityData?.utilitiesAndConsents
+  const declarationDetails = eligibilityData?.declarations
+  const customer = {
+    name: formatDisplayValue(applicantDetails?.fullName),
+    phone: formatDisplayValue(applicantDetails?.contactEmailPhone),
+    email: "-",
+    location: formatDisplayValue(applicantDetails?.siteAddress),
+    status: eligibilityData ? formatEligibilityStatus(eligibilityData.status) : "Live Data Pending",
+  }
+  const formSubmission = {
+    applicantName: formatDisplayValue(applicantDetails?.fullName),
+    contactEmail: "-",
+    contactPhone: formatDisplayValue(applicantDetails?.contactEmailPhone),
+    siteAddress: formatDisplayValue(applicantDetails?.siteAddress),
+    postcode: formatDisplayValue(applicantDetails?.postcode),
+    propertyType: formatDisplayValue(propertyDetails?.propertyType),
+    ownershipStatus: formatDisplayValue(propertyDetails?.ownershipStatus),
+    conservationArea: formatDisplayValue(siteConstraints?.heritageAndListing.isInConservationArea),
+    purposeOfDevelopment: formatDisplayValue(propertyDetails?.purposeOfDevelopment),
+    existingWidth: formatDisplayValue(worksDetails?.existingPropertyWidthM),
+    existingDepth: formatDisplayValue(worksDetails?.distanceFromBoundaryM),
+    proposedExtensionDepth: formatDisplayValue(worksDetails?.proposedExtensionWidthM),
+    proposedExtensionHeight: formatDisplayValue(worksDetails?.proposedExtensionHeightM),
+    externalMaterials: formatDisplayValue(materialDetails?.wallMaterials),
+    briefDescription: formatDisplayValue(worksDetails?.propsedWorksDescription),
+    listedBuilding: formatDisplayValue(siteConstraints?.heritageAndListing.isListedBuilding),
+    tpo: formatDisplayValue(siteConstraints?.treesHedgesLandscaping.treesWithTPO),
+    floodZone: formatDisplayValue(siteConstraints?.floodAndEnvironmentalRisk.isSiteInFloodRiskArea),
+    vehicleAccess: formatDisplayValue(siteConstraints?.accessAndParking.newOrAlteredAccess),
+    preApplicationAdvice: formatDisplayValue(siteConstraints?.preApplicationAdvice.soughtPreAppAdvice),
+    additionalConsents: formatDisplayValue(utilitiesAndConsents?.additionalConsents),
+    consultationBooked: false,
+    consultationDate: "-",
+    consultationTime: "-",
+    consultant: "-",
+    consultantTitle: "-",
+    consultationType: "-",
+    consultationDuration: "-",
+  }
+  const project = {
+    id: projectId ?? "Unknown",
+    clientId: "-",
+    clientName: formatDisplayValue(applicantDetails?.fullName),
+    title: `Project ${projectId ?? "Unknown"}`,
+    description: eligibilityData
+      ? "Live project details derived from the connected eligibility record."
+      : "No live project metadata connected yet.",
+    service: formatDisplayValue(propertyDetails?.purposeOfDevelopment),
+    serviceType: formatDisplayValue(propertyDetails?.propertyType),
+    serviceNo: "-",
+    stage: activeRoadmapStage?.label ?? "Unknown",
+    location: formatDisplayValue(applicantDetails?.siteAddress),
+    postcode: formatDisplayValue(applicantDetails?.postcode),
+    status: eligibilityData?.status ?? "live_data_pending",
+    createdDate: eligibilityData?.createdAt ?? "",
+    updatedDate: eligibilityData?.updatedAt ?? "",
+    agentX: "-",
+    agentY: "-",
+    architect: "-",
+    progress: eligibilityData?.completionStatus.percentage ?? 0,
+    estimatedCompletionDate: eligibilityData?.updatedAt ?? "",
+    councilReference: "-",
+    councilName: "-",
+    timeline: "-",
+  }
+  const requirements = {
+    propertyType: formatDisplayValue(propertyDetails?.propertyType),
+    locationType: formatDisplayValue(applicantDetails?.siteAddress),
+    timeline: "-",
+    scope: [
+      formSubmission.purposeOfDevelopment,
+      formSubmission.briefDescription,
+    ].filter((item) => item !== "-"),
+    constraints: [
+      `Listed Building: ${formSubmission.listedBuilding}`,
+      `Flood Zone: ${formSubmission.floodZone}`,
+      `TPO: ${formSubmission.tpo}`,
+    ],
+    notes: "No additional live requirement notes connected yet.",
+  }
+  const quote = {
+    reference: "-",
+    submittedOn: "-",
+    status: "pending",
+    total: "-",
+    breakdown: [] as { label: string; amount: string; pct: number }[],
+  }
   const journeySteps = roadmapStages.map((stage) =>
     stage.id === "received-checklist"
       ? {
           ...stage,
           details: requiredChecklistNames,
+          detailsLabel: "Required documents",
           desc: !checklistLoaded
             ? "Checklist pending from Agent Y."
             : requiredChecklistNames.length > 0
             ? "Checklist received. Required documents listed below."
             : "Checklist received. No required documents flagged.",
+        }
+      : stage.id === "eligibility-check" && eligibilityData
+      ? {
+          ...stage,
+          details: pendingEligibilitySteps,
+          detailsLabel: "Pending eligibility sections",
+          desc: eligibilityData.completionStatus.isCompleted
+            ? "Eligibility form completed and ready for the next stage."
+            : `Eligibility form is ${eligibilityData.completionStatus.percentage}% complete.`,
         }
       : stage
   )
@@ -466,7 +775,7 @@ export default function UserDetailsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[11px]">
                   <span className="rounded-full bg-white border px-2.5 py-1 text-slate-600">
-                    Project {project.id}
+                    Project {projectId ?? "Unknown"}
                   </span>
                   <span className="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-1 text-blue-700">
                     Agent X Workspace
@@ -477,336 +786,148 @@ export default function UserDetailsPage() {
             </div>
 
             
-            {/* NEW: FORM SUBMISSION DETAILS */}
             {activeSection === "submission" && (
-              <div>
-                <div className="flex items-center gap-2 mb-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <FileCheck size={18} className="text-emerald-600" />
                   <h2 className="text-lg font-bold text-slate-900">
                     Application Form Submission
                   </h2>
                 </div>
-
-                {/* Submission Header */}
-                <div className="bg-gradient-to-br from-emerald-50 to-blue-50 rounded-xl border border-emerald-200 p-5 mb-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900 mb-1">
-                        Planning Application Details
-                      </h3>
-                      <p className="text-sm text-slate-600">
-                        Form completed with all required information
-                      </p>
-                    </div>
-                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                      Submitted
-                    </span>
+                {eligibilityData ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <OverviewCard title="Applicant Details" icon={<User size={14} className="text-blue-600" />}>
+                      <div className="space-y-2">
+                        <InfoPair label="Applicant" value={applicantDetails?.fullName} />
+                        <InfoPair label="Contact" value={applicantDetails?.contactEmailPhone} />
+                        <InfoPair label="Site Address" value={applicantDetails?.siteAddress} />
+                        <InfoPair label="Postcode" value={applicantDetails?.postcode} />
+                      </div>
+                    </OverviewCard>
+                    <OverviewCard title="Property Details" icon={<Home size={14} className="text-emerald-600" />}>
+                      <div className="space-y-2">
+                        <InfoPair label="Property Type" value={propertyDetails?.propertyType} />
+                        <InfoPair label="Ownership" value={propertyDetails?.ownershipStatus} />
+                        <InfoPair label="Purpose" value={propertyDetails?.purposeOfDevelopment} />
+                        <InfoPair
+                          label="Near Conservation / Listed"
+                          value={propertyDetails?.nearConservationAreaOrListedBuilding}
+                        />
+                      </div>
+                    </OverviewCard>
                   </div>
-                </div>
-
-                {/* Property Details */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-                    <Home size={14} className="text-blue-600" />
-                    Property Details
-                  </h3>
-                  <div className="grid md:grid-cols-2 gap-3">
-                    <DetailCard label="Applicant Name" value={formSubmission.applicantName} />
-                    <DetailCard label="Property Type" value={formSubmission.propertyType} />
-                    <DetailCard label="Site Address" value={formSubmission.siteAddress} />
-                    <DetailCard label="Postcode" value={formSubmission.postcode} />
-                    <DetailCard label="Ownership Status" value={formSubmission.ownershipStatus} />
-                    <DetailCard 
-                      label="Purpose" 
-                      value={formSubmission.purposeOfDevelopment}
-                      highlight
-                    />
-                  </div>
-                </div>
-
-                {/* Contact Information */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-                    <Mail size={14} className="text-rose-600" />
-                    Contact Information
-                  </h3>
-                  <div className="grid md:grid-cols-2 gap-3">
-                    <DetailCard label="Email" value={formSubmission.contactEmail} />
-                    <DetailCard label="Phone" value={formSubmission.contactPhone} />
-                  </div>
-                </div>
-
-                {/* Conservation Status */}
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <Info size={16} className="text-blue-600 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-blue-900 mb-2">
-                        Conservation Area Status
-                      </p>
-                      <p className="text-sm text-blue-800">
-                        <span className="font-bold">{formSubmission.conservationArea === "No" ? "Not in" : "Within"}</span> a conservation area or listed building
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                ) : (
+                  <LiveDataPlaceholder
+                    title="Submission data not connected"
+                    message="This section will show the submitted application details once a live project form endpoint is connected."
+                  />
+                )}
               </div>
             )}
 
-            {/* NEW: DIMENSIONS SECTION */}
             {activeSection === "dimensions" && (
-              <div>
-                <div className="flex items-center gap-2 mb-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <Ruler size={18} className="text-blue-600" />
                   <h2 className="text-lg font-bold text-slate-900">
                     Project Dimensions
                   </h2>
                 </div>
-
-                {/* Visual comparison */}
-                <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl border p-6 mb-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    {/* Existing */}
-                    <div>
-                      <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
-                        Existing Property
-                      </p>
+                {eligibilityData ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <OverviewCard title="Dimensions" icon={<Ruler size={14} className="text-blue-600" />}>
                       <div className="space-y-2">
-                        <DimensionRow label="Width" value={formSubmission.existingWidth} />
-                        <DimensionRow label="Depth" value={formSubmission.existingDepth} />
+                        <InfoPair label="Existing Width (m)" value={worksDetails?.existingPropertyWidthM} />
+                        <InfoPair label="Existing Height (m)" value={worksDetails?.existingPropertyHeightM} />
+                        <InfoPair label="Proposed Width (m)" value={worksDetails?.proposedExtensionWidthM} />
+                        <InfoPair label="Proposed Height (m)" value={worksDetails?.proposedExtensionHeightM} />
+                        <InfoPair label="Distance From Boundary (m)" value={worksDetails?.distanceFromBoundaryM} />
+                        <InfoPair label="Ridge / Eaves Height (m)" value={worksDetails?.ridgeOrEavesHeightM} />
                       </div>
-                    </div>
-
-                    {/* Proposed */}
-                    <div>
-                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">
-                        Proposed Extension
-                      </p>
+                    </OverviewCard>
+                    <OverviewCard title="Materials + Drawings" icon={<Building2 size={14} className="text-amber-600" />}>
                       <div className="space-y-2">
-                        <DimensionRow label="Extension Depth" value={formSubmission.proposedExtensionDepth} highlight />
-                        <DimensionRow label="Extension Height" value={formSubmission.proposedExtensionHeight} highlight />
+                        <InfoPair label="Works Description" value={worksDetails?.propsedWorksDescription} />
+                        <InfoPair label="Wall Materials" value={materialDetails?.wallMaterials} />
+                        <InfoPair label="Roof Materials" value={materialDetails?.roofMaterials} />
+                        <InfoPair label="Match Existing" value={materialDetails?.materialsMatchExisting} />
+                        <InfoPair label="Colour Notes" value={materialDetails?.colourOrFinishNotes} />
+                        {planDetails?.locationPlan ? (
+                          <a
+                            href={planDetails.locationPlan}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                          >
+                            <ExternalLink size={14} />
+                            Open location plan
+                          </a>
+                        ) : null}
                       </div>
-                    </div>
+                    </OverviewCard>
                   </div>
-                </div>
-
-                {/* Materials */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                    <Building2 size={14} className="text-amber-600" />
-                    External Materials
-                  </h3>
-                  <div className="rounded-xl border bg-amber-50 px-4 py-3">
-                    <p className="text-sm font-semibold text-amber-900">
-                      {formSubmission.externalMaterials}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div className="rounded-xl border bg-slate-50 p-4">
-                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                    Project Description
-                  </p>
-                  <p className="text-sm text-slate-700 leading-relaxed">
-                    {formSubmission.briefDescription}
-                  </p>
-                </div>
+                ) : (
+                  <LiveDataPlaceholder
+                    title="Dimension data not connected"
+                    message="Live dimension and drawing details will appear here when available from the project APIs."
+                  />
+                )}
               </div>
             )}
 
-            {/* NEW: CONSTRAINTS SECTION */}
             {activeSection === "constraints" && (
-              <div>
-                <div className="flex items-center gap-2 mb-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <Shield size={18} className="text-amber-600" />
                   <h2 className="text-lg font-bold text-slate-900">
                     Planning Constraints
                   </h2>
                 </div>
-
-                <div className="grid md:grid-cols-2 gap-4 mb-6">
-                  <ConstraintCard
-                    icon={<TreePine size={16} />}
-                    label="Listed Building"
-                    value={formSubmission.listedBuilding}
-                    color="green"
-                  />
-                  <ConstraintCard
-                    icon={<TreePine size={16} />}
-                    label="Tree Preservation Order (TPO)"
-                    value={formSubmission.tpo}
-                    color="green"
-                  />
-                  <ConstraintCard
-                    icon={<Droplets size={16} />}
-                    label="Flood Zone"
-                    value={formSubmission.floodZone}
-                    color="green"
-                  />
-                  <ConstraintCard
-                    icon={<Car size={16} />}
-                    label="Vehicle Access"
-                    value={formSubmission.vehicleAccess}
-                    color="blue"
-                  />
-                </div>
-
-                {/* Additional Info */}
-                <div className="space-y-3">
-                  <div className="rounded-xl border bg-slate-50 px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-700">
-                        Pre-application Advice Sought
-                      </p>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                        formSubmission.preApplicationAdvice === "Yes" 
-                          ? "bg-blue-100 text-blue-700" 
-                          : "bg-slate-200 text-slate-600"
-                      }`}>
-                        {formSubmission.preApplicationAdvice}
-                      </span>
-                    </div>
+                {eligibilityData ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <OverviewCard title="Site Constraints" icon={<AlertTriangle size={14} className="text-amber-600" />}>
+                      <div className="space-y-2">
+                        <InfoPair label="Listed Building" value={siteConstraints?.heritageAndListing.isListedBuilding} />
+                        <InfoPair label="Conservation Area" value={siteConstraints?.heritageAndListing.isInConservationArea} />
+                        <InfoPair label="Flood Risk Area" value={siteConstraints?.floodAndEnvironmentalRisk.isSiteInFloodRiskArea} />
+                        <InfoPair label="Contaminated Land" value={siteConstraints?.floodAndEnvironmentalRisk.isSiteContaminatedLand} />
+                        <InfoPair label="New / Altered Access" value={siteConstraints?.accessAndParking.newOrAlteredAccess} />
+                        <InfoPair label="Access / Parking Changes" value={siteConstraints?.accessAndParking.accessOrParkingChanges} />
+                        <InfoPair label="Cycle Storage" value={siteConstraints?.accessAndParking.cycleStorageProvisions} />
+                      </div>
+                    </OverviewCard>
+                    <OverviewCard title="Trees + Consents" icon={<TreePine size={14} className="text-emerald-600" />}>
+                      <div className="space-y-2">
+                        <InfoPair label="Pre-App Advice Sought" value={siteConstraints?.preApplicationAdvice.soughtPreAppAdvice} />
+                        <InfoPair label="Pre-App Ref" value={siteConstraints?.preApplicationAdvice.preApplicationReferenceNumber} />
+                        <InfoPair label="Trees with TPO" value={siteConstraints?.treesHedgesLandscaping.treesWithTPO} />
+                        <InfoPair label="Tree Species" value={siteConstraints?.treesHedgesLandscaping.treeSpecies} />
+                        <InfoPair label="Trees Within Falling Distance" value={siteConstraints?.treesHedgesLandscaping.treesWithinFallingDistance} />
+                        <InfoPair label="Additional Consents" value={utilitiesAndConsents?.additionalConsents} />
+                      </div>
+                    </OverviewCard>
                   </div>
-
-                  <div className="rounded-xl border bg-slate-50 px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-700">
-                        Additional Consents Required
-                      </p>
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                        {formSubmission.additionalConsents}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="mt-6 bg-gradient-to-br from-emerald-50 to-blue-50 border border-emerald-200 rounded-xl p-5">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle size={18} className="text-emerald-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 mb-1">
-                        Constraint Assessment Complete
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        No major planning constraints identified. Project eligible to proceed.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                ) : (
+                  <LiveDataPlaceholder
+                    title="Constraint data not connected"
+                    message="This section now avoids hardcoded planning constraints and will only show live values."
+                  />
+                )}
               </div>
             )}
 
-            {/* NEW: CONSULTATION SECTION */}
             {activeSection === "consultation" && (
-              <div>
-                <div className="flex items-center gap-2 mb-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <Video size={18} className="text-blue-600" />
                   <h2 className="text-lg font-bold text-slate-900">
                     Consultation Booking
                   </h2>
                 </div>
-
-                {formSubmission.consultationBooked ? (
-                  <>
-                    {/* Booking Confirmed */}
-                    <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl p-6 mb-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <p className="text-sm opacity-90 mb-1">
-                            {formSubmission.consultationType}
-                          </p>
-                          <h3 className="text-xl font-bold">
-                            Consultation Confirmed
-                          </h3>
-                        </div>
-                        <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold">
-                          Scheduled
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock size={14} />
-                        <span>{formSubmission.consultationDuration}</span>
-                      </div>
-                    </div>
-
-                    {/* Consultant Profile */}
-                    <div className="bg-white rounded-xl border p-5 mb-6">
-                      <div className="flex items-start gap-4">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                          {formSubmission.consultant.charAt(0)}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="text-lg font-bold text-slate-900 mb-1">
-                            {formSubmission.consultant}
-                          </h4>
-                          <p className="text-sm text-slate-600 mb-3">
-                            {formSubmission.consultantTitle}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <BadgeCheck size={14} className="text-blue-600" />
-                            <span className="text-xs text-slate-500">
-                              Verified Planning Expert
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Meeting Details */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-4 rounded-xl border bg-slate-50 px-4 py-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Calendar size={18} className="text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs text-slate-500 mb-0.5">Date</p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {formSubmission.consultationDate}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 rounded-xl border bg-slate-50 px-4 py-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Clock size={18} className="text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs text-slate-500 mb-0.5">Time</p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {formSubmission.consultationTime}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 rounded-xl border bg-slate-50 px-4 py-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Video size={18} className="text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs text-slate-500 mb-0.5">Format</p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            Video Call (15 minutes)
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <div className="mt-6">
-                      <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-                        <Video size={16} />
-                        Join Video Call
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-12">
-                    <Video size={48} className="text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-500">No consultation scheduled</p>
-                  </div>
-                )}
+                <LiveDataPlaceholder
+                  title="Consultation data not connected"
+                  message="The previous hardcoded consultation booking has been removed. This section will show real consultation details once that API is wired in."
+                />
               </div>
             )}
 
@@ -859,98 +980,22 @@ export default function UserDetailsPage() {
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-4 mb-6">
-                  <div className="rounded-xl border bg-blue-50 p-5">
-                    <p className="text-xs font-bold text-blue-900 uppercase tracking-wider mb-3">
-                      Client Side
-                    </p>
-                    <div className="space-y-2 text-sm">
-                      <p className="text-slate-800">
-                        <span className="font-semibold">Primary Contact:</span> {customer.name}
-                      </p>
-                      <p className="text-slate-700">
-                        <span className="font-semibold">Requested Docs:</span> Proof of ownership, recent utility bill, signed consent form
-                      </p>
-                      <p className="text-slate-700">
-                        <span className="font-semibold">Pending from Client:</span> Upload signed consent form (PDF) and boundary photo
-                      </p>
+                  <OverviewCard title="Customer Request State" icon={<Upload size={14} className="text-blue-600" />}>
+                    <div className="space-y-2">
+                      <InfoPair label="Project" value={projectId ?? "Unknown"} />
+                      <InfoPair label="Docs Requested From Customer" value={requiredForCustomer.length} />
+                      <InfoPair label="Checklist Loaded" value={documentState.checklist.length > 0} />
                     </div>
-                  </div>
+                  </OverviewCard>
 
-                  <div className="rounded-xl border bg-amber-50 p-5">
-                    <p className="text-xs font-bold text-amber-900 uppercase tracking-wider mb-3">
-                      Agent Y Side
-                    </p>
-                    <div className="space-y-2 text-sm">
-                      <p className="text-slate-800">
-                        <span className="font-semibold">Assigned Agent Y:</span> {project.agentY}
-                      </p>
-                      <p className="text-slate-700">
-                        <span className="font-semibold">Current Need:</span> Missing supporting documents for planning package
-                      </p>
-                      <p className="text-slate-700">
-                        <span className="font-semibold">Pending from Agent Y:</span> Final review after Agent X shares verified files
-                      </p>
+                  <OverviewCard title="Agent Y Handover State" icon={<Bot size={14} className="text-amber-600" />}>
+                    <div className="space-y-2">
+                      <InfoPair label="Checklist Items" value={documentState.checklist.length} />
+                      <InfoPair label="Missing Docs Sent To Agent X" value={Boolean(missingDocsSentLog)} />
+                      <InfoPair label="Required Docs Sent To Agent Y" value={Boolean(requiredDocsSentLog)} />
+                      <InfoPair label="Agent Y Upload Events" value={agentYSubmittedCount} />
                     </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-5 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm font-bold text-slate-900">
-                      Document Mediation Action Queue
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {coordinationTasks.filter((task) => task.done).length}/{coordinationTasks.length} completed
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    {coordinationTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className={`rounded-lg border px-4 py-3 flex items-start gap-3 ${
-                          task.done ? "bg-emerald-50 border-emerald-200" : "bg-slate-50"
-                        }`}
-                      >
-                        <button
-                          onClick={() => toggleCoordinationTask(task.id)}
-                          className={`mt-0.5 h-5 w-5 rounded-full border grid place-items-center transition-colors ${
-                            task.done
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "border-slate-300 text-transparent hover:border-blue-500"
-                          }`}
-                          aria-label="Toggle task status"
-                        >
-                          <CheckCircle size={12} />
-                        </button>
-
-                        <div className="flex-1">
-                          <p className={`text-sm font-medium ${task.done ? "text-emerald-900 line-through" : "text-slate-800"}`}>
-                            {task.title}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
-                            <span className="rounded-full bg-white border px-2 py-0.5 text-slate-600">
-                              Owner: {task.owner}
-                            </span>
-                            <span className="rounded-full bg-white border px-2 py-0.5 text-slate-600">
-                              Due: {task.due}
-                            </span>
-                            <span
-                              className={`rounded-full px-2 py-0.5 font-semibold ${
-                                task.priority === "high"
-                                  ? "bg-rose-100 text-rose-700"
-                                  : task.priority === "medium"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-slate-200 text-slate-700"
-                              }`}
-                            >
-                              {task.priority} priority
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  </OverviewCard>
                 </div>
 
                 <div className="rounded-xl border bg-slate-50 p-4">
@@ -967,7 +1012,277 @@ export default function UserDetailsPage() {
             {/* PROJECT OVERVIEW */}
             {activeSection === "project" && (
               <div>
-                
+                {activeRoadmapStage?.id === "eligibility-check" && (
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <FileCheck size={18} className="text-blue-600" />
+                      <h2 className="text-lg font-bold text-slate-900">
+                        Eligibility Details
+                      </h2>
+                    </div>
+
+                    {eligibilityLoading ? (
+                      <div className="rounded-xl border bg-slate-50 p-5 text-sm text-slate-500">
+                        Loading eligibility details...
+                      </div>
+                    ) : eligibilityData ? (
+                      <div className="space-y-4">
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <OverviewCard
+                            title="Applicant + Property"
+                            icon={<Home size={14} className="text-blue-600" />}
+                          >
+                            <div className="space-y-2 text-sm text-slate-700">
+                              <InfoPair label="Applicant" value={eligibilityData.applicantAndProperty.applicantDetails.fullName} />
+                              <InfoPair label="Contact" value={eligibilityData.applicantAndProperty.applicantDetails.contactEmailPhone} />
+                              <InfoPair label="Site Address" value={eligibilityData.applicantAndProperty.applicantDetails.siteAddress} />
+                              <InfoPair label="Postcode" value={eligibilityData.applicantAndProperty.applicantDetails.postcode} />
+                              <InfoPair label="Property Type" value={eligibilityData.applicantAndProperty.propertyAndOwnership.propertyType} />
+                              <InfoPair label="Ownership" value={eligibilityData.applicantAndProperty.propertyAndOwnership.ownershipStatus} />
+                              <InfoPair label="Purpose" value={eligibilityData.applicantAndProperty.propertyAndOwnership.purposeOfDevelopment} />
+                              <InfoPair
+                                label="Near Conservation / Listed"
+                                value={eligibilityData.applicantAndProperty.propertyAndOwnership.nearConservationAreaOrListedBuilding}
+                              />
+                              <InfoPair
+                                label="Uses Planning Agent"
+                                value={eligibilityData.applicantAndProperty.agentDetails.usesPlanningAgent}
+                              />
+                              <InfoPair label="Agent Name" value={eligibilityData.applicantAndProperty.agentDetails.agentName} />
+                              <InfoPair
+                                label="Agent Contact"
+                                value={eligibilityData.applicantAndProperty.agentDetails.agentContactEmailPhone}
+                              />
+                              <InfoPair
+                                label="Agent Address"
+                                value={eligibilityData.applicantAndProperty.agentDetails.agentAddress}
+                              />
+                            </div>
+                          </OverviewCard>
+
+                          <OverviewCard
+                            title="Works + Materials"
+                            icon={<Ruler size={14} className="text-indigo-600" />}
+                          >
+                            <div className="space-y-2 text-sm text-slate-700">
+                              <InfoPair
+                                label="Works Description"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.propsedWorksDescription}
+                              />
+                              <InfoPair label="Wall Materials" value={eligibilityData.worksAndMaterials.materials.wallMaterials} />
+                              <InfoPair label="Roof Materials" value={eligibilityData.worksAndMaterials.materials.roofMaterials} />
+                              <InfoPair label="Match Existing" value={eligibilityData.worksAndMaterials.materials.materialsMatchExisting} />
+                              <InfoPair label="Colour Notes" value={eligibilityData.worksAndMaterials.materials.colourOrFinishNotes} />
+                              <InfoPair
+                                label="Existing Width (m)"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.existingPropertyWidthM}
+                              />
+                              <InfoPair
+                                label="Existing Height (m)"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.existingPropertyHeightM}
+                              />
+                              <InfoPair
+                                label="Proposed Width (m)"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.proposedExtensionWidthM}
+                              />
+                              <InfoPair
+                                label="Proposed Height (m)"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.proposedExtensionHeightM}
+                              />
+                              <InfoPair
+                                label="Distance From Boundary (m)"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.distanceFromBoundaryM}
+                              />
+                              <InfoPair
+                                label="Ridge / Eaves Height (m)"
+                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.ridgeOrEavesHeightM}
+                              />
+                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.locationPlan ? (
+                                <a
+                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.locationPlan}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open location plan
+                                </a>
+                              ) : null}
+                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.sitePlan ? (
+                                <a
+                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.sitePlan}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open site plan
+                                </a>
+                              ) : null}
+                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.existingAndProposedElevations ? (
+                                <a
+                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.existingAndProposedElevations}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open elevations
+                                </a>
+                              ) : null}
+                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.additionalDrawings ? (
+                                <a
+                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.additionalDrawings}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open additional drawings
+                                </a>
+                              ) : null}
+                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.photographsOfSite ? (
+                                <a
+                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.photographsOfSite}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open site photographs
+                                </a>
+                              ) : null}
+                            </div>
+                          </OverviewCard>
+
+                          <OverviewCard
+                            title="Site Constraints"
+                            icon={<Shield size={14} className="text-amber-600" />}
+                          >
+                            <div className="space-y-2 text-sm text-slate-700">
+                              <InfoPair label="Listed Building" value={eligibilityData.siteConstraints.heritageAndListing.isListedBuilding} />
+                              <InfoPair label="Conservation Area" value={eligibilityData.siteConstraints.heritageAndListing.isInConservationArea} />
+                              <InfoPair label="Flood Risk Area" value={eligibilityData.siteConstraints.floodAndEnvironmentalRisk.isSiteInFloodRiskArea} />
+                              <InfoPair label="Contaminated Land" value={eligibilityData.siteConstraints.floodAndEnvironmentalRisk.isSiteContaminatedLand} />
+                              <InfoPair label="New or Altered Access" value={eligibilityData.siteConstraints.accessAndParking.newOrAlteredAccess} />
+                              <InfoPair label="Parking Changes" value={eligibilityData.siteConstraints.accessAndParking.accessOrParkingChanges} />
+                              <InfoPair label="Cycle Storage" value={eligibilityData.siteConstraints.accessAndParking.cycleStorageProvisions} />
+                              <InfoPair label="Pre-App Advice Sought" value={eligibilityData.siteConstraints.preApplicationAdvice.soughtPreAppAdvice} />
+                              <InfoPair label="Officer Name" value={eligibilityData.siteConstraints.preApplicationAdvice.officerName} />
+                              <InfoPair
+                                label="Pre-App Reference"
+                                value={eligibilityData.siteConstraints.preApplicationAdvice.preApplicationReferenceNumber}
+                              />
+                              <InfoPair
+                                label="Pre-App Summary"
+                                value={eligibilityData.siteConstraints.preApplicationAdvice.preApplicationAdviceSummary}
+                              />
+                              <InfoPair label="Trees with TPO" value={eligibilityData.siteConstraints.treesHedgesLandscaping.treesWithTPO} />
+                              <InfoPair label="Tree Species" value={eligibilityData.siteConstraints.treesHedgesLandscaping.treeSpecies} />
+                              <InfoPair
+                                label="Trees Within Falling Distance"
+                                value={eligibilityData.siteConstraints.treesHedgesLandscaping.treesWithinFallingDistance}
+                              />
+                              {eligibilityData.siteConstraints.floodAndEnvironmentalRisk.floodRiskAssesmentReport ? (
+                                <a
+                                  href={eligibilityData.siteConstraints.floodAndEnvironmentalRisk.floodRiskAssesmentReport}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open flood risk assessment
+                                </a>
+                              ) : null}
+                              {eligibilityData.siteConstraints.treesHedgesLandscaping.treeSurveyReport ? (
+                                <a
+                                  href={eligibilityData.siteConstraints.treesHedgesLandscaping.treeSurveyReport}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  <ExternalLink size={14} />
+                                  Open tree survey report
+                                </a>
+                              ) : null}
+                            </div>
+                          </OverviewCard>
+
+                          <OverviewCard
+                            title="Utilities + Consents"
+                            icon={<Droplets size={14} className="text-emerald-600" />}
+                          >
+                            <div className="space-y-2 text-sm text-slate-700">
+                              <InfoPair label="Additional Consents" value={eligibilityData.utilitiesAndConsents.additionalConsents} />
+                              <InfoPair label="Community Consultation" value={eligibilityData.utilitiesAndConsents.communityConsultation} />
+                              <InfoPair label="Water Supply" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.waterSupply} />
+                              <InfoPair label="Drainage" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.sewageOrDrainage} />
+                              <InfoPair label="Surface Water Drainage" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.surfaceWaterDrainage} />
+                              <InfoPair label="Renewable Energy" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.renewableEnergyProposals} />
+                              <InfoPair
+                                label="Renewable Energy Details"
+                                value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.renewableEnergyDetails}
+                              />
+                              <InfoPair
+                                label="Existing Waste Arrangements"
+                                value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.existingWasteArrangements}
+                              />
+                              <InfoPair
+                                label="Ownership Certificate"
+                                value={eligibilityData.utilitiesAndConsents.ownershipCertificate.certificateOfOwnership}
+                              />
+                              <InfoPair
+                                label="Ownership Details"
+                                value={eligibilityData.utilitiesAndConsents.ownershipCertificate.ownershipDetails}
+                              />
+                            </div>
+                          </OverviewCard>
+
+                          <OverviewCard
+                            title="Declaration"
+                            icon={<BadgeCheck size={14} className="text-blue-600" />}
+                          >
+                            <div className="space-y-2 text-sm text-slate-700">
+                              <InfoPair
+                                label="Signatory Capacity"
+                                value={eligibilityData.declarations.digitalSignature.signatoryCapacity}
+                              />
+                              <InfoPair
+                                label="Signatory Name"
+                                value={eligibilityData.declarations.digitalSignature.signatoryFullName}
+                              />
+                              <InfoPair
+                                label="Authority Confirmed"
+                                value={eligibilityData.declarations.reviewDeclarations.authorityConfirmed}
+                              />
+                              <InfoPair
+                                label="Fee Agreement Accepted"
+                                value={eligibilityData.declarations.reviewDeclarations.feeAgreementAccepted}
+                              />
+                              <InfoPair
+                                label="Information Accurate"
+                                value={eligibilityData.declarations.reviewDeclarations.informationAccurate}
+                              />
+                              <InfoPair
+                                label="Private Rights Acknowledged"
+                                value={eligibilityData.declarations.reviewDeclarations.privateRightsAcknowledged}
+                              />
+                              <InfoPair
+                                label="Public Data Consent"
+                                value={eligibilityData.declarations.reviewDeclarations.publicDataConsent}
+                              />
+                            </div>
+                          </OverviewCard>
+                        </div>
+
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border bg-slate-50 p-5 text-sm text-slate-500">
+                        No eligibility details were found for this project.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Project Header */}
                 <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border p-5 mb-6">
@@ -1020,12 +1335,12 @@ export default function UserDetailsPage() {
                   <MetaBox
                     icon={<Calendar size={14} className="text-emerald-500" />}
                     label="Created"
-                    value={new Date(project.createdDate).toLocaleDateString()}
+                    value={formatDateValue(project.createdDate)}
                   />
                   <MetaBox
                     icon={<Calendar size={14} className="text-amber-500" />}
                     label="Est. Completion"
-                    value={new Date(project.estimatedCompletionDate).toLocaleDateString()}
+                    value={formatDateValue(project.estimatedCompletionDate)}
                   />
                 </div>
 
@@ -1610,8 +1925,8 @@ export default function UserDetailsPage() {
               <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <MaskField label="Client Name" value="[PROTECTED]" />
                 <MaskField label="Primary Phone" value="[PROTECTED]" />
-                <MaskField label="Property Address" value="Springfield, IL 62704" />
-                <MaskField label="Email Correspondence" value="c****@domain.com" />
+                <MaskField label="Property Address" value="[PROTECTED]" />
+                <MaskField label="Email Correspondence" value="[PROTECTED]" />
               </div>
 
               <div className="p-4 sm:p-6 border-t">
@@ -1691,14 +2006,14 @@ export default function UserDetailsPage() {
               </span>
             </div>
             <div className="space-y-2 text-sm">
-              <p className="flex items-center gap-2 text-slate-700">
-                <CheckCircle size={14} className="text-emerald-500" />
-                CIL Form
-              </p>
-              <p className="flex items-center gap-2 text-slate-700">
-                <CheckCircle size={14} className="text-emerald-500" />
-                Location Plan
-              </p>
+              {(documentState.checklist.slice(0, 2).length > 0
+                ? documentState.checklist.slice(0, 2).map((doc) => doc.name)
+                : ["No live document names connected"]).map((item) => (
+                <p key={item} className="flex items-center gap-2 text-slate-700">
+                  <CheckCircle size={14} className="text-emerald-500" />
+                  {item}
+                </p>
+              ))}
             </div>
             <p className="mt-4 text-[11px] text-slate-500">
               Privacy compliance verified. Client identifying data was redacted for this handover.
@@ -1756,6 +2071,21 @@ export default function UserDetailsPage() {
 /* ─────────────────────────────────────────────
    HELPERS
 ───────────────────────────────────────────── */
+
+function LiveDataPlaceholder({
+  title,
+  message,
+}: {
+  title: string
+  message: string
+}) {
+  return (
+    <div className="rounded-xl border bg-slate-50 p-5">
+      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <p className="mt-2 text-sm text-slate-500">{message}</p>
+    </div>
+  )
+}
 
 function MaskField({ label, value }: { label: string; value: string }) {
   return (
@@ -1823,6 +2153,25 @@ function FlowStepCard({
         <p className="text-xs font-bold">{title}</p>
       </div>
       <p className="text-xs leading-relaxed">{desc}</p>
+    </div>
+  )
+}
+
+function InfoPair({
+  label,
+  value,
+}: {
+  label: string
+  value?: string | number | boolean | null
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-lg bg-white px-3 py-2">
+      <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
+        {label}
+      </span>
+      <span className="max-w-[60%] text-right text-sm font-semibold text-slate-800">
+        {formatDisplayValue(value)}
+      </span>
     </div>
   )
 }

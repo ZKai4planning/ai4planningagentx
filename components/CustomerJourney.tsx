@@ -12,6 +12,7 @@ type JourneyStep = {
   label: string
   desc: string
   details?: string[]
+  detailsLabel?: string
 }
 
 type CustomerJourneyProps = {
@@ -182,7 +183,7 @@ export default function CustomerJourney({
               {steps[currentStep]?.details?.length ? (
                 <div className="mt-3">
                   <p className="text-xs font-semibold text-slate-500 mb-2">
-                    Required documents
+                    {steps[currentStep]?.detailsLabel ?? "Required documents"}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {steps[currentStep]?.details?.map((item) => (
