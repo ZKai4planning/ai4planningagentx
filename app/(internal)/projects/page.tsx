@@ -6,34 +6,60 @@ import { FolderKanban, Eye } from "lucide-react"
 import DataTable, { Column } from "@/components/datatable"
 import axiosInstance from "@/lib/axiosinstance"
 
+type ApiUser = {
+  userId: string
+  fullName?: string
+  email?: string
+  phoneNumber?: string
+  isActive?: boolean
+}
+
 type ApiService = {
-  _id: string
   serviceId: string
-  title: string
-  serviceName: string
-  description: string
+  title?: string
+  serviceName?: string
+  description?: string
   image?: string
   status?: boolean
 }
 
+type ApiSubService = {
+  subServiceId: string
+  title?: string
+  subServiceName?: string
+  description?: string
+  image?: string
+  status?: boolean
+}
+
+type ApiProjectStage = {
+  _id?: string
+  stageId: string
+  label?: string
+  route?: string
+  priority?: number
+  initialStage?: boolean
+  status?: boolean
+}
+
 type ApiProject = {
-  _id: string
   projectId: string
-  status?: string
+  userId: string
+  subServiceId: string
+  projectStageId: string
+  projectStatus?: string
+  isDeleted?: boolean
+  user?: ApiUser | null
+  service?: ApiService | null
+  subService?: ApiSubService | null
+  projectStage?: ApiProjectStage | null
   createdAt: string
   updatedAt: string
-  clientName?: string
-  services?: ApiService[]
-  clientDetails?: {
-    _id: string
-    userId: string
-    email?: string
-    fullName?: string
-  } | null
 }
 
 type ApiPagination = {
   totalItems: number
+  itemCount?: number
   currentPage: number
   totalPages: number
   pageSize: number
@@ -51,9 +77,10 @@ type ProjectsResponse = {
 type ProjectRow = {
   id: string
   projectId: string
-  name: string
+  customer: string
   service: string
-  description: string
+  subService: string
+  stage: string
   status: string
   createdOn: string
 }
@@ -82,7 +109,8 @@ function formatDate(value: string) {
 }
 
 function formatStatusLabel(value: string | undefined) {
-  if (!value) return "Unknown";
+  if (!value) return "Unknown"
+
   return value
     .split("_")
     .filter(Boolean)
@@ -91,24 +119,24 @@ function formatStatusLabel(value: string | undefined) {
 }
 
 function mapProjectToRow(project: ApiProject): ProjectRow {
-  const services = project.services ?? []
-  const service = services
-    .map((item) => item.serviceName || item.title)
-    .filter(Boolean)
-    .join(", ")
+  const service =
+    project.service?.serviceName ||
+    project.service?.title ||
+    "-"
 
-  const description = services
-    .map((item) => item.description)
-    .filter(Boolean)
-    .join(" | ")
+  const subService =
+    project.subService?.title ||
+    project.subService?.subServiceName ||
+    "-"
 
   return {
-    id: project._id,
+    id: project.projectId,
     projectId: project.projectId,
-    name: project.clientName || project.clientDetails?.fullName || "-",
-    service: service || "-",
-    description: description || "-",
-    status: project.status || "unknown",
+    customer: project.user?.fullName || project.user?.email || "-",
+    service,
+    subService,
+    stage: project.projectStage?.label || "-",
+    status: project.projectStatus || "unknown",
     createdOn: formatDate(project.createdAt),
   }
 }
@@ -117,6 +145,7 @@ function StatusBadge({ status }: { status: string | undefined }) {
   const tone = status
     ? {
         eligibility_in_progress: "bg-amber-50 text-amber-700",
+        in_progress: "bg-blue-50 text-blue-700",
         active: "bg-blue-50 text-blue-700",
         completed: "bg-emerald-50 text-emerald-700",
         cancelled: "bg-rose-50 text-rose-700",
@@ -151,6 +180,7 @@ export default function ProjectsPage() {
           params: {
             page,
             limit,
+            isDeleted: false,
             ...(deferredSearch.trim() ? { search: deferredSearch.trim() } : {}),
           },
         })
@@ -204,10 +234,10 @@ export default function ProjectsPage() {
       ),
     },
     {
-      key: "name",
-      label: "Name",
+      key: "customer",
+      label: "Customer",
       sortable: true,
-      width: "180px",
+      width: "220px",
       render: (value) => (
         <span className="font-medium text-slate-800">{value}</span>
       ),
@@ -222,11 +252,21 @@ export default function ProjectsPage() {
       ),
     },
     {
-      key: "description",
-      label: "Description",
-      width: "360px",
+      key: "subService",
+      label: "Sub Service",
+      sortable: true,
+      width: "260px",
       render: (value) => (
         <p className="line-clamp-2 text-sm text-slate-600">{value}</p>
+      ),
+    },
+    {
+      key: "stage",
+      label: "Stage",
+      sortable: true,
+      width: "180px",
+      render: (value) => (
+        <span className="text-sm font-medium text-slate-700">{value}</span>
       ),
     },
     {
@@ -287,7 +327,7 @@ export default function ProjectsPage() {
           setSearch(value)
           setPage(1)
         }}
-        searchPlaceholder="Search projects..."
+        searchPlaceholder="Search projects, services, or sub-services..."
         currentPage={page}
         onPageChange={setPage}
         rowsPerPage={limit}
