@@ -3,40 +3,16 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { Bot, Paperclip, Send, X } from "lucide-react"
-
-interface AttachedFile {
-  name: string
-  size: string
-  type: "pdf" | "image" | "file"
-  url?: string
-}
-
-interface ChatMsg {
-  id: number
-  from: "agentX" | "agentY"
-  text: string
-  time: string
-  files?: AttachedFile[]
-}
-
-const INITIAL_CHAT: ChatMsg[] = [
-  {
-    id: 1,
-    from: "agentY",
-    text: "Please share the updated site plan and ownership certificate.",
-    time: "09:42 AM",
-  },
-  {
-    id: 2,
-    from: "agentX",
-    text: "Acknowledged. I will upload both after validating the customer files.",
-    time: "09:55 AM",
-  },
-]
+import {
+  describeWorkspaceChatSender,
+  formatWorkspaceChatTime,
+  useWorkspaceChat,
+  type AttachedFile,
+} from "@/lib/workspace-chat"
 
 export default function AgentYChatPage() {
   const { id } = useParams<{ id: string }>()
-  const [messages, setMessages] = useState(INITIAL_CHAT)
+  const { config, messages, sendMessage } = useWorkspaceChat(id, "agent-y-chat")
   const [inputText, setInputText] = useState("")
   const [pendingFiles, setPendingFiles] = useState<AttachedFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -60,20 +36,11 @@ export default function AgentYChatPage() {
 
   const handleSend = () => {
     if (!inputText.trim() && pendingFiles.length === 0) return
-    const now = new Date()
-    const time = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`
-    setMessages((p) => [
-      ...p,
-      {
-        id: Date.now(),
-        from: "agentX",
-        text: inputText.trim(),
-        time,
-        files: pendingFiles.length ? [...pendingFiles] : undefined,
-      },
-    ])
+    sendMessage({
+      from: "agentX",
+      text: inputText,
+      files: pendingFiles,
+    })
     setInputText("")
     setPendingFiles([])
   }
@@ -87,20 +54,20 @@ export default function AgentYChatPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-12">
-      <div className="max-w-[1200px] mx-auto px-6 lg:px-8 pt-30">
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-8 pt-8">
         <div className="bg-white rounded-2xl border shadow-sm p-6 lg:p-8">
           <div className="rounded-xl border bg-slate-50 px-4 py-3 mb-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Bot size={18} className="text-blue-600" />
-                <p className="text-sm font-semibold text-slate-900">Agent Y Chat</p>
+                <p className="text-sm font-semibold text-slate-900">{config.title}</p>
               </div>
               <span className="rounded-full bg-white border px-2.5 py-1 text-[11px] text-slate-600">
                 Project {id}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1.5">
-              Channel: Agent X and Agent Y coordination.
+              Channel: {config.description}
             </p>
           </div>
 
@@ -135,7 +102,7 @@ export default function AgentYChatPage() {
                       m.from === "agentX" ? "text-blue-200" : "text-slate-400"
                     }`}
                   >
-                    {m.from === "agentX" ? "You" : "Agent Y"} - {m.time}
+                    {describeWorkspaceChatSender("agent-y-chat", m.from)} - {formatWorkspaceChatTime(m.sentAt)}
                   </p>
                 </div>
               </div>

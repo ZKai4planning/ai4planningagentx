@@ -3,40 +3,16 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { Paperclip, Send, User, X } from "lucide-react"
-
-interface AttachedFile {
-  name: string
-  size: string
-  type: "pdf" | "image" | "file"
-  url?: string
-}
-
-interface ChatMsg {
-  id: number
-  from: "client" | "agent"
-  text: string
-  time: string
-  files?: AttachedFile[]
-}
-
-const INITIAL_CHAT: ChatMsg[] = [
-  {
-    id: 1,
-    from: "client",
-    text: "I have uploaded the biodiversity report draft. Please check if this is acceptable.",
-    time: "10:10 AM",
-  },
-  {
-    id: 2,
-    from: "agent",
-    text: "Received. I will validate the report and share feedback shortly.",
-    time: "10:22 AM",
-  },
-]
+import {
+  describeWorkspaceChatSender,
+  formatWorkspaceChatTime,
+  useWorkspaceChat,
+  type AttachedFile,
+} from "@/lib/workspace-chat"
 
 export default function CustomerChatPage() {
   const { id } = useParams<{ id: string }>()
-  const [messages, setMessages] = useState(INITIAL_CHAT)
+  const { config, messages, sendMessage } = useWorkspaceChat(id, "customer-chat")
   const [inputText, setInputText] = useState("")
   const [pendingFiles, setPendingFiles] = useState<AttachedFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -60,20 +36,11 @@ export default function CustomerChatPage() {
 
   const handleSend = () => {
     if (!inputText.trim() && pendingFiles.length === 0) return
-    const now = new Date()
-    const time = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`
-    setMessages((p) => [
-      ...p,
-      {
-        id: Date.now(),
-        from: "agent",
-        text: inputText.trim(),
-        time,
-        files: pendingFiles.length ? [...pendingFiles] : undefined,
-      },
-    ])
+    sendMessage({
+      from: "agent",
+      text: inputText,
+      files: pendingFiles,
+    })
     setInputText("")
     setPendingFiles([])
   }
@@ -87,20 +54,20 @@ export default function CustomerChatPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-12">
-      <div className="max-w-[1200px] mx-auto px-6 lg:px-8 pt-30">
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-8 pt-8">
         <div className="bg-white rounded-2xl border shadow-sm p-6 lg:p-8">
           <div className="rounded-xl border bg-slate-50 px-4 py-3 mb-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <User size={18} className="text-blue-600" />
-                <p className="text-sm font-semibold text-slate-900">Customer Chat</p>
+                <p className="text-sm font-semibold text-slate-900">{config.title}</p>
               </div>
               <span className="rounded-full bg-white border px-2.5 py-1 text-[11px] text-slate-600">
                 Project {id}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1.5">
-              Channel: Customer to Agent X communication.
+              Channel: {config.description}
             </p>
           </div>
 
@@ -135,7 +102,7 @@ export default function CustomerChatPage() {
                       m.from === "agent" ? "text-blue-200" : "text-slate-400"
                     }`}
                   >
-                    {m.from === "agent" ? "You" : "Customer"} - {m.time}
+                    {describeWorkspaceChatSender("customer-chat", m.from)} - {formatWorkspaceChatTime(m.sentAt)}
                   </p>
                 </div>
               </div>
