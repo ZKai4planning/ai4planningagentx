@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
+import { useAuthStore } from "@/lib/zustand"
 import {
   AlertTriangle,
   Bell,
@@ -134,6 +135,10 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all")
   const [showNotifications, setShowNotifications] = useState(false)
+  const userId = useAuthStore((state) => state.userId)
+  const name = useAuthStore((state) => state.name)
+  const email = useAuthStore((state) => state.email)
+  const displayName = name?.trim() || email?.split("@")[0] || userId || "Unknown"
 
   const filteredProjects = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -170,11 +175,17 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 sm:px-6 lg:px-10 py-6 sm:py-8 space-y-6">
-      <section className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-10 border-y bg-white/95 backdrop-blur-sm px-4 sm:px-6 lg:px-10 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        {/* <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-slate-900">Main Dashboard Header</p>
             <p className="text-xs text-slate-500">Aligned quick access and cross-channel notifications</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Logged in</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {displayName}
+            </span>
           </div>
           <div className="relative">
             <button
@@ -216,7 +227,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* <div className="mt-3 flex flex-wrap items-center gap-2">
           <Link href="/projects" className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -231,7 +242,7 @@ export default function DashboardPage() {
 
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Agent X Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">{displayName} Dashboard</h1>
           <p className="text-sm text-slate-500">
             Spotlight 1-2 priority projects, with fast access to all projects and features.
           </p>

@@ -1,25 +1,19 @@
 "use client"
 
-import { useState } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
+import { usePathname, useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   LayoutDashboard,
   Users,
   FolderKanban,
-  Building2,
-  Banknote,
   LogOut,
-  MessageSquare,
-  FileText,
-  StickyNote,
-  ListChecks,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  Calendar,
 } from "lucide-react"
 import { cn } from "@/app/lib/utils"
+import { useAuthStore } from "@/lib/zustand"
+import axiosInstance from "@/lib/axiosinstance"
 
 /* ================= TYPES ================= */
 
@@ -41,47 +35,6 @@ type SidebarProps = {
   onToggle: () => void
 }
 
-/* ================= MENU CONFIG ================= */
-
-const defaultMenu: MenuItem[] = [
-  {
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    href: "/dashboard",
-  },
-  {
-    label: "Users",
-    icon: Users,
-    href: "/users",
-  },
-  {
-    label: "Projects",
-    icon: FolderKanban,
-    href: "/projects",
-  },
-  // {
-  //   label: "Submit to Agent Y",
-  //   icon: Send,
-  //   href: "/dashboard/submit",
-  // },
-]
-
-function normalizeWorkspaceSection(sectionParam: string | null): string {
-  if (sectionParam === "chat" || sectionParam === "communication") {
-    return "communication"
-  }
-
-  if (sectionParam === "document" || sectionParam === "documents") {
-    return "documents"
-  }
-
-  if (sectionParam === "coordination") {
-    return "documents"
-  }
-
-  return sectionParam ?? "project"
-}
-
 /* ================= COMPONENT ================= */
 
 export default function Sidebar({
@@ -90,116 +43,47 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const name = useAuthStore((state) => state.name)
+  const email = useAuthStore((state) => state.email)
+  const userId = useAuthStore((state) => state.userId)
+
   const [openGroup, setOpenGroup] = useState<string | null>(null)
-  const workspaceMatch = pathname.match(/^\/projects\/([^/]+)\/workspace(?:\/.*)?$/)
-  const workspaceRouteMatch = pathname.match(/^\/projects\/[^/]+\/workspace\/([^/?#]+)/)
-  const projectId = workspaceMatch?.[1]
-  const isWorkspace = Boolean(projectId)
-  const routeSection = workspaceRouteMatch?.[1]
-  const currentWorkspaceSection =
-    routeSection === "chat"
-      ? "customer-chat"
-      : routeSection === "agent-y-chat"
-      ? "agent-y-chat"
-      : routeSection === "customer-chat"
-      ? "customer-chat"
-      : routeSection === "agent-y-documents"
-      ? "agent-y-documents"
-      : routeSection === "customer-documents"
-      ? "customer-documents"
-      : routeSection === "documents"
-      ? "agent-y-documents"
-      : routeSection === "project"
-      ? "project"
-      : routeSection === "calendar"
-      ? "calendar"
-      : routeSection === "payments"
-      ? "payments"
-      : routeSection === "logs"
-      ? "logs"
-      : routeSection === "notes"
-      ? "notes"
-      : normalizeWorkspaceSection(searchParams.get("section"))
 
-  const workspaceMenu: MenuItem[] = isWorkspace
-    ? [
-        {
-          label: "Project Overview",
-          icon: Building2,
-          href: `/projects/${projectId}/workspace/project`,
-          workspaceSection: "project",
-        },
-        {
-          label: "Chat",
-          icon: MessageSquare,
-          children: [
-            {
-              label: "Agent Y Chat",
-              href: `/projects/${projectId}/workspace/agent-y-chat`,
-            },
-            {
-              label: "Customer Chat",
-              href: `/projects/${projectId}/workspace/customer-chat`,
-            },
-          ],
-        },
-        {
-          label: "Documents",
-          icon: FileText,
-          children: [
-            {
-              label: "Agent Y Documents",
-              href: `/projects/${projectId}/workspace/agent-y-documents`,
-            },
-            {
-              label: "Customer Documents",
-              href: `/projects/${projectId}/workspace/customer-documents`,
-            },
-          ],
-        },
-        {
-          label: "Payment Details",
-          icon: Banknote,
-          href: `/projects/${projectId}/workspace/payments`,
-          workspaceSection: "payments",
-        },
-        {
-          label: "Logs",
-          icon: ListChecks,
-          href: `/projects/${projectId}/workspace/logs`,
-          workspaceSection: "logs",
-        },
-        {
-          label: "Notes",
-          icon: StickyNote,
-          href: `/projects/${projectId}/workspace/notes`,
-          workspaceSection: "notes",
-        },
-        // {
-        //   label: "Project Handover",
-        //   icon: Send,
-        //   href: "/projects/handover",
-        // },
-        // {
-        //   label: "All Projects",
-        //   icon: FolderKanban,
-        //   href: "/projects",
-        // },
-        {
-          label: "Calendar",
-          icon: Calendar,
-          href: `/projects/${projectId}/workspace/calendar`,
-          workspaceSection: "calendar",
-        },
-         {
-          label: "Exit Workspace",
-          icon: LogOut,
-          href: "/projects",
-        },
-      ]
-    : defaultMenu
+  /* ================= PROFILE STATUS ================= */
 
-  const menu = workspaceMenu
+  const [profileStatus, setProfileStatus] = useState<{
+    completionPercentage: number
+    completedFields: number
+    totalFields: number
+  } | null>(null)
+
+  useEffect(() => {
+    const fetchProfileStatus = async () => {
+      try {
+        if (!userId) return
+
+        const res = await axiosInstance.get(
+          `/employee/profile/${userId}/status`
+        )
+
+        setProfileStatus(res.data)
+      } catch (error) {
+        console.error("Profile status fetch failed", error)
+      }
+    }
+
+    fetchProfileStatus()
+  }, [userId])
+
+  /* ================= NAME ================= */
+
+  const displayName =
+    (name && name.trim().length > 0 ? name.trim() : null) ??
+    (email ? email.split("@")[0] : "User")
+
+  /* ================= UI ================= */
 
   return (
     <aside
@@ -216,7 +100,7 @@ export default function Sidebar({
               A
             </div>
             <span className="font-semibold text-slate-900">
-              AI4 Planning
+              AI4Planning
             </span>
           </div>
         )}
@@ -229,137 +113,90 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* ================= MENU ================= */}
+      {/* ================= MENU (unchanged) ================= */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {menu.map((item) => {
-          const Icon = item.icon
-          const isActive = item.workspaceSection && isWorkspace
-            ? currentWorkspaceSection === item.workspaceSection
-            : !!item.href &&
-              (pathname === item.href ||
-                (item.href !== "/projects" && pathname.startsWith(`${item.href}/`)))
-          const hasActiveChild = Boolean(
-            item.children?.some((child) => pathname === child.href)
-          )
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
+        >
+          <LayoutDashboard size={18} />
+          {!collapsed && "Dashboard"}
+        </Link>
 
-          const isOpen = openGroup === item.label || hasActiveChild
+        <Link
+          href="/users"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
+        >
+          <Users size={18} />
+          {!collapsed && "Users"}
+        </Link>
 
-          /* ---------- SIMPLE LINK ---------- */
-          if (!item.children) {
-            return (
-              <Link
-                key={item.label}
-                href={item.href!}
-                className={cn(
-                  "group relative flex items-center gap-3 rounded-xl py-3 text-sm font-medium transition",
-                  collapsed ? "justify-center px-3" : "px-4",
-                  isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-100"
-                )}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-blue-600" />
-                )}
+        <Link
+          href="/projects"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
+        >
+          <FolderKanban size={18} />
+          {!collapsed && "Projects"}
+        </Link>
 
-                <Icon size={18} />
-
-                {!collapsed && <span>{item.label}</span>}
-
-                {/* Tooltip */}
-                {collapsed && (
-                  <span className="pointer-events-none absolute left-full ml-3 rounded-md bg-slate-900 px-3 py-1 text-xs text-white opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                    {item.label}
-                  </span>
-                )}
-              </Link>
-            )
-          }
-
-          /* ---------- GROUP ---------- */
-          return (
-            <div key={item.label} className="relative">
-              <button
-                onClick={() =>
-                  !collapsed &&
-                  setOpenGroup(isOpen ? null : item.label)
-                }
-                className={cn(
-                  "group flex w-full items-center gap-3 rounded-xl py-3 text-sm font-medium transition",
-                  collapsed ? "justify-center px-3" : "px-4",
-                  hasActiveChild
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-100"
-                )}
-              >
-                {hasActiveChild && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-blue-600" />
-                )}
-                <Icon size={18} />
-
-                {!collapsed && (
-                  <>
-                    <span className="flex-1 text-left">
-                      {item.label}
-                    </span>
-                    <ChevronDown
-                      size={16}
-                      className={cn(
-                        "transition",
-                        isOpen && "rotate-180"
-                      )}
-                    />
-                  </>
-                )}
-
-                {/* Tooltip */}
-                {collapsed && (
-                  <span className="pointer-events-none absolute left-full ml-3 rounded-md bg-slate-900 px-3 py-1 text-xs text-white opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                    {item.label}
-                  </span>
-                )}
-              </button>
-
-              {/* SUB MENU */}
-              {!collapsed && isOpen && (
-                <div className="ml-10 mt-1 space-y-1">
-                  {item.children.map((child) => {
-                    const childActive =
-                      pathname === child.href
-
-                    return (
-                      <Link
-                        key={child.label}
-                        href={child.href}
-                        className={cn(
-                          "block rounded-lg px-3 py-2 text-sm transition",
-                          childActive
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-slate-600 hover:bg-slate-100"
-                        )}
-                      >
-                        {child.label}
-                      </Link>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        <Link
+          href="/login"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
+        >
+          <LogOut size={18} />
+          {!collapsed && "Logout"}
+        </Link>
       </nav>
 
       {/* ================= FOOTER ================= */}
       {!collapsed && (
-        <div className="border-t px-4 py-4">
-          <div className="rounded-xl bg-slate-50 px-4 py-3">
-            <p className="text-xs text-slate-500">
-              Good Afternoon
-            </p>
-            <p className="text-sm font-semibold text-slate-900">
-              Agent X 👋
-            </p>
+        <div className="border-t px-4 py-4 space-y-3">
+
+          {/* 🔹 PROFILE COMPLETION */}
+          {profileStatus && (
+            <div
+              onClick={() => router.push("/profile")}
+              className="cursor-pointer rounded-lg bg-slate-50 p-3 transition hover:bg-slate-100"
+            >
+              <div className="flex justify-between text-xs text-slate-500 mb-2">
+                <span className="font-medium">Profile Completion</span>
+                <span className="font-semibold text-slate-700">
+                  {profileStatus.completionPercentage}%
+                </span>
+              </div>
+
+              <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 transition-all duration-500"
+                  style={{
+                    width: `${profileStatus.completionPercentage}%`,
+                  }}
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-400 mt-2">
+                {profileStatus.completedFields} of{" "}
+                {profileStatus.totalFields} fields completed
+              </p>
+            </div>
+          )}
+
+          {/* 🔹 WELCOME CARD */}
+          <div className="rounded-xl bg-slate-50 px-4 py-3 flex items-center gap-3">
+            <div className="h-9 w-9 flex items-center justify-center rounded-full bg-blue-600 text-white font-semibold">
+              {displayName?.charAt(0).toUpperCase()}
+            </div>
+
+            <div>
+              <p className="text-xs text-slate-500">
+                Welcome back,
+              </p>
+              <p className="text-sm font-semibold text-slate-900">
+                {displayName}
+              </p>
+            </div>
           </div>
+
         </div>
       )}
     </aside>

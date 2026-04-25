@@ -3,52 +3,16 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { MessageSquare, Paperclip, Send, X } from "lucide-react"
-
-interface AttachedFile {
-  name: string
-  size: string
-  type: "pdf" | "image" | "file"
-  url?: string
-}
-
-interface ChatMsg {
-  id: number
-  from: "client" | "agent"
-  text: string
-  time: string
-  files?: AttachedFile[]
-}
-
-const INITIAL_CHAT: ChatMsg[] = [
-  {
-    id: 1,
-    from: "client",
-    text: "Can we reduce the extension depth slightly?",
-    time: "10:24 AM",
-  },
-  {
-    id: 2,
-    from: "agent",
-    text: "Yes, that improves approval chances. I'll revise the drawings and resend.",
-    time: "10:41 AM",
-  },
-  {
-    id: 3,
-    from: "client",
-    text: "Great, also any concerns about the left boundary?",
-    time: "11:05 AM",
-  },
-  {
-    id: 4,
-    from: "agent",
-    text: "We'll keep 1m clearance. That satisfies the council's party wall rules.",
-    time: "11:18 AM",
-  },
-]
+import {
+  describeWorkspaceChatSender,
+  formatWorkspaceChatTime,
+  useWorkspaceChat,
+  type AttachedFile,
+} from "@/lib/workspace-chat"
 
 export default function WorkspaceChatPage() {
   const { id } = useParams<{ id: string }>()
-  const [messages, setMessages] = useState(INITIAL_CHAT)
+  const { config, messages, sendMessage } = useWorkspaceChat(id, "chat")
   const [inputText, setInputText] = useState("")
   const [pendingFiles, setPendingFiles] = useState<AttachedFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -72,20 +36,11 @@ export default function WorkspaceChatPage() {
 
   const handleSend = () => {
     if (!inputText.trim() && pendingFiles.length === 0) return
-    const now = new Date()
-    const time = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`
-    setMessages((p) => [
-      ...p,
-      {
-        id: Date.now(),
-        from: "agent",
-        text: inputText.trim(),
-        time,
-        files: pendingFiles.length ? [...pendingFiles] : undefined,
-      },
-    ])
+    sendMessage({
+      from: "agent",
+      text: inputText,
+      files: pendingFiles,
+    })
     setInputText("")
     setPendingFiles([])
   }
@@ -106,7 +61,7 @@ export default function WorkspaceChatPage() {
               <div className="flex items-center gap-2">
                 <MessageSquare size={18} className="text-blue-600" />
                 <p className="text-sm font-semibold text-slate-900">
-                  Client Communication
+                  {config.title}
                 </p>
               </div>
               <span className="rounded-full bg-white border px-2.5 py-1 text-[11px] text-slate-600">
@@ -114,7 +69,7 @@ export default function WorkspaceChatPage() {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1.5">
-              Channel: Customer to Agent X only.
+              Channel: {config.description}
             </p>
           </div>
 
@@ -149,7 +104,7 @@ export default function WorkspaceChatPage() {
                       m.from === "agent" ? "text-blue-200" : "text-slate-400"
                     }`}
                   >
-                    {m.from === "agent" ? "You" : "Client"} - {m.time}
+                    {describeWorkspaceChatSender("chat", m.from)} - {formatWorkspaceChatTime(m.sentAt)}
                   </p>
                 </div>
               </div>

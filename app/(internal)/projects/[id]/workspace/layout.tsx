@@ -1,15 +1,20 @@
-import type { ReactNode } from "react"
+import WorkspaceHeader from "@/components/WorkspaceHeader"
 
-export default function WorkspaceLayout({
+export default async function WorkspaceLayout({
   children,
+  params,
 }: {
-  children: ReactNode
+  children: React.ReactNode
+  params: Promise<{ id: string }>
 }) {
+
+  const { id } = await params
+
   return (
     <section data-workspace-layout="project-workspace" className="w-full">
+      <WorkspaceHeader projectId={id} />
       {children}
     </section>
   )
 }
-
 
