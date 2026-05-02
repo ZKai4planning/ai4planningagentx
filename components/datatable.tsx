@@ -181,10 +181,10 @@ export default function DataTable<
   /* ================= UI ================= */
 
   return (
-    <div className="bg-white rounded-xl shadow p-6">
+    <div className="rounded-xl bg-white p-4 shadow sm:p-6">
 
       {/* TOP BAR */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <input
           placeholder={searchPlaceholder}
           value={resolvedSearch}
@@ -192,10 +192,10 @@ export default function DataTable<
             setSearch(e.target.value)
             setCurrentPage(1)
           }}
-          className="border px-4 py-2 rounded-lg w-64 text-sm"
+          className="w-full rounded-lg border px-4 py-2 text-sm lg:w-80"
         />
 
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:justify-end">
           {statusOptions && statusKey && (
             <select
               value={statusFilter}
@@ -203,7 +203,7 @@ export default function DataTable<
                 setStatusFilter(e.target.value)
                 setCurrentPage(1)
               }}
-              className="border px-4 py-2 rounded-lg text-sm"
+              className="w-full rounded-lg border px-4 py-2 text-sm sm:w-auto"
             >
               <option value="ALL">All</option>
               {statusOptions.map(opt => (
@@ -218,7 +218,7 @@ export default function DataTable<
             <button
               onClick={handleExport}
               disabled={visibleData.length === 0}
-              className="flex items-center gap-2 border px-4 py-2 rounded-lg text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               <Download className="w-4 h-4" />
               Export
@@ -317,8 +317,8 @@ export default function DataTable<
       </div>
 
       {/* FOOTER */}
-      <div className="flex justify-between items-center mt-4 text-sm">
-        <div>
+      <div className="mt-4 flex flex-col gap-3 text-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="text-slate-600">
           Rows per page:
           <select
             value={resolvedRowsPerPage}
@@ -334,7 +334,7 @@ export default function DataTable<
           </select>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <span className="text-slate-500">
             {resolvedTotalItems === 0
               ? "0 results"
@@ -343,23 +343,25 @@ export default function DataTable<
                   resolvedTotalItems
                 )} of ${resolvedTotalItems}`}
           </span>
-          <button
-            disabled={resolvedCurrentPage === 1}
-            onClick={() => setCurrentPage(resolvedCurrentPage - 1)}
-            className="px-3 py-1 border rounded disabled:opacity-50"
-          >
-            Prev
-          </button>
-          <span className="text-slate-600">
-            Page {resolvedCurrentPage} of {resolvedTotalPages}
-          </span>
-          <button
-            disabled={resolvedCurrentPage === resolvedTotalPages}
-            onClick={() => setCurrentPage(resolvedCurrentPage + 1)}
-            className="px-3 py-1 border rounded disabled:opacity-50"
-          >
-            Next
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              disabled={resolvedCurrentPage === 1}
+              onClick={() => setCurrentPage(resolvedCurrentPage - 1)}
+              className="rounded border px-3 py-1 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <span className="text-slate-600">
+              Page {resolvedCurrentPage} of {resolvedTotalPages}
+            </span>
+            <button
+              disabled={resolvedCurrentPage === resolvedTotalPages}
+              onClick={() => setCurrentPage(resolvedCurrentPage + 1)}
+              className="rounded border px-3 py-1 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>
