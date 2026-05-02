@@ -25,6 +25,8 @@ import {
   Send,
   X,
   Upload,
+  ChevronDown,
+  ChevronUp,
   Building2,
   Calendar,
   Ruler,
@@ -92,8 +94,25 @@ type EligibilityResponse = {
 type EligibilityFieldKey = keyof typeof eligibilityFieldMappings
 
 type EligibilityRow = {
+  key: string
   label: string
   value: string
+  kind?: "default" | "block"
+}
+
+const longEligibilityFieldKeys = new Set<EligibilityFieldKey>([
+  "previousProposalDetails",
+  "projectComparison",
+  "proposedWorksDescription",
+  "preApplicationAdviceSummary",
+  "ownershipDetails",
+  "agentAddress",
+])
+
+const defaultExpandedEligibilityGroups: Record<string, boolean> = {
+  "applicant-property": true,
+  "works-materials": true,
+  "site-constraints": true,
 }
 
 const submissionApplicantFieldKeys: EligibilityFieldKey[] = [
@@ -175,15 +194,27 @@ const eligibilityDetailGroups: Array<{
       "agentAddress",
     ],
     extraRows: (eligibility) => [
-      { label: "Site Address", value: getEligibilitySiteAddress(eligibility) ?? "-" },
-      { label: "Postcode", value: formatEligibilityFieldValue(eligibility, "postcode") },
       {
+        key: "siteAddress",
+        label: "Site Address",
+        value: getEligibilitySiteAddress(eligibility) ?? "-",
+        kind: "block",
+      },
+      {
+        key: "postcode",
+        label: "Postcode",
+        value: formatEligibilityFieldValue(eligibility, "postcode"),
+      },
+      {
+        key: "useAlternateCorrespondenceAddress",
         label: "Alternate address for correspondence?",
         value: formatEligibilityFieldValue(eligibility, "useAlternateCorrespondenceAddress"),
       },
       {
+        key: "correspondenceAddress",
         label: "Correspondence Address",
         value: getEligibilityCorrespondenceAddress(eligibility) ?? "-",
+        kind: "block",
       },
     ],
   },
@@ -446,9 +477,15 @@ function buildEligibilityRows(
   if (!eligibility) return []
 
   return fieldKeys.map((fieldKey) => ({
+    key: fieldKey,
     label: eligibilityFieldMappings[fieldKey].label,
     value: formatEligibilityFieldValue(eligibility, fieldKey),
+    kind: longEligibilityFieldKeys.has(fieldKey) ? "block" : "default",
   }))
+}
+
+function isAnsweredEligibilityValue(value: string) {
+  return value !== "-"
 }
 
 function formatDimensionSummary(first: string, second: string) {
@@ -468,6 +505,31 @@ function getToneIcon(tone: "blue" | "indigo" | "amber" | "emerald") {
       return <Droplets size={14} className="text-emerald-600" />
     default:
       return <FileCheck size={14} className="text-blue-600" />
+  }
+}
+
+function getEligibilityToneClasses(tone: "blue" | "indigo" | "amber" | "emerald") {
+  switch (tone) {
+    case "blue":
+      return {
+        card: "border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50",
+        badge: "bg-blue-100 text-blue-700 border-blue-200",
+      }
+    case "indigo":
+      return {
+        card: "border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-slate-50",
+        badge: "bg-indigo-100 text-indigo-700 border-indigo-200",
+      }
+    case "amber":
+      return {
+        card: "border-amber-100 bg-gradient-to-br from-amber-50 via-white to-slate-50",
+        badge: "bg-amber-100 text-amber-700 border-amber-200",
+      }
+    case "emerald":
+      return {
+        card: "border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-slate-50",
+        badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      }
   }
 }
 
@@ -545,6 +607,10 @@ export default function UserDetailsPage() {
   )
   const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
   const [eligibilityLoading, setEligibilityLoading] = useState(true)
+  const [showEmptyEligibilityFields, setShowEmptyEligibilityFields] = useState(false)
+  const [expandedEligibilityGroups, setExpandedEligibilityGroups] = useState<Record<string, boolean>>(
+    defaultExpandedEligibilityGroups
+  )
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const router = useRouter()
   const roadmapStages = roadmap.stages
@@ -846,10 +912,21 @@ export default function UserDetailsPage() {
   const treeSurveyReportUrl = eligibilityData
     ? getEligibilityResourceValue(eligibilityData, "treeSurveyReport")
     : undefined
+  const toggleEligibilityGroup = (groupId: string) => {
+    setExpandedEligibilityGroups((prev) => ({
+      ...prev,
+      [groupId]: !(prev[groupId] ?? false),
+    }))
+  }
   const submissionApplicantRows = eligibilityData
     ? [
-        { label: "Applicant Name", value: applicantName },
-        { label: "Site Address", value: siteAddress },
+        { key: "applicantName", label: "Applicant Name", value: applicantName },
+        {
+          key: "siteAddress",
+          label: "Site Address",
+          value: siteAddress,
+          kind: "block",
+        },
         ...buildEligibilityRows(eligibilityData, submissionApplicantFieldKeys),
       ]
     : []
@@ -875,8 +952,41 @@ export default function UserDetailsPage() {
           ...buildEligibilityRows(eligibilityData, group.fieldKeys),
           ...(group.extraRows ? group.extraRows(eligibilityData) : []),
         ],
+        links:
+          group.id === "works-materials"
+            ? [
+                { label: "Location Plan", url: locationPlanUrl },
+                { label: "Site Plan", url: sitePlanUrl },
+                { label: "Elevations", url: existingAndProposedElevationsUrl },
+                { label: "Additional Drawings", url: additionalDrawingsUrl },
+                { label: "Site Photographs", url: photographsOfSiteUrl },
+              ].filter((item) => typeof item.url === "string")
+            : group.id === "site-constraints"
+            ? [
+                { label: "Flood Risk Assessment", url: floodRiskAssessmentReportUrl },
+                { label: "Tree Survey Report", url: treeSurveyReportUrl },
+              ].filter((item) => typeof item.url === "string")
+            : [],
       }))
+        .map((group) => {
+          const answeredCount = group.rows.filter((row) =>
+            isAnsweredEligibilityValue(row.value)
+          ).length
+          const visibleRows = showEmptyEligibilityFields
+            ? group.rows
+            : group.rows.filter((row) => isAnsweredEligibilityValue(row.value))
+
+          return {
+            ...group,
+            answeredCount,
+            totalCount: group.rows.length,
+            visibleRows,
+          }
+        })
     : []
+  const answeredEligibilitySectionCount = eligibilityDetailSections.filter(
+    (group) => group.answeredCount > 0 || group.links.length > 0
+  ).length
   const customer = {
     name: applicantName,
     phone: applicantPhone,
@@ -1321,97 +1431,75 @@ export default function UserDetailsPage() {
                       </div>
                     ) : eligibilityData ? (
                       <div className="space-y-4">
+                        <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-4">
+                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                              <EligibilitySummaryItem label="Applicant" value={applicantName} />
+                              <EligibilitySummaryItem label="Site Address" value={siteAddress} />
+                              <EligibilitySummaryItem label="Property Type" value={propertyType} />
+                              <EligibilitySummaryItem label="Council" value={councilName} />
+                              <EligibilitySummaryItem
+                                label="Completion"
+                                value={`${eligibilityData.completionStatus.percentage}%`}
+                                hint={formatEligibilityStatus(eligibilityData.status)}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 self-start">
+                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                                {answeredEligibilitySectionCount}/{eligibilityDetailSections.length} sections answered
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setShowEmptyEligibilityFields((prev) => !prev)}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                              >
+                                {showEmptyEligibilityFields ? "Hide empty fields" : "Show empty fields"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                         <div className="grid md:grid-cols-2 gap-4">
                           {eligibilityDetailSections.map((group) => (
-                            <OverviewCard
+                            <EligibilitySectionCard
                               key={group.id}
                               title={group.title}
                               icon={getToneIcon(group.tone)}
+                              tone={group.tone}
+                              expanded={expandedEligibilityGroups[group.id] ?? false}
+                              answeredCount={group.answeredCount}
+                              totalCount={group.totalCount}
+                              onToggle={() => toggleEligibilityGroup(group.id)}
                             >
-                              <div className="space-y-2 text-sm text-slate-700">
-                                {group.rows.map((row) => (
-                                  <InfoPair key={`${group.id}-${row.label}`} label={row.label} value={row.value} />
-                                ))}
-                                {group.id === "works-materials" && typeof locationPlanUrl === "string" ? (
-                                  <a
-                                    href={locationPlanUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open location plan
-                                  </a>
-                                ) : null}
-                                {group.id === "works-materials" && typeof sitePlanUrl === "string" ? (
-                                  <a
-                                    href={sitePlanUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open site plan
-                                  </a>
-                                ) : null}
-                                {group.id === "works-materials" && typeof existingAndProposedElevationsUrl === "string" ? (
-                                  <a
-                                    href={existingAndProposedElevationsUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open elevations
-                                  </a>
-                                ) : null}
-                                {group.id === "works-materials" && typeof additionalDrawingsUrl === "string" ? (
-                                  <a
-                                    href={additionalDrawingsUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open additional drawings
-                                  </a>
-                                ) : null}
-                                {group.id === "works-materials" && typeof photographsOfSiteUrl === "string" ? (
-                                  <a
-                                    href={photographsOfSiteUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open site photographs
-                                  </a>
-                                ) : null}
-                                {group.id === "site-constraints" &&
-                                typeof floodRiskAssessmentReportUrl === "string" ? (
-                                  <a
-                                    href={floodRiskAssessmentReportUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open flood risk assessment
-                                  </a>
-                                ) : null}
-                                {group.id === "site-constraints" && typeof treeSurveyReportUrl === "string" ? (
-                                  <a
-                                    href={treeSurveyReportUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                  >
-                                    <ExternalLink size={14} />
-                                    Open tree survey report
-                                  </a>
-                                ) : null}
-                              </div>
-                            </OverviewCard>
+                              {group.visibleRows.length > 0 ? (
+                                <div className="space-y-2 text-sm text-slate-700">
+                                  {group.visibleRows.map((row) => (
+                                    <EligibilityValueRow
+                                      key={`${group.id}-${row.key}`}
+                                      label={row.label}
+                                      value={row.value}
+                                      kind={row.kind}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-500">
+                                  {showEmptyEligibilityFields
+                                    ? "No fields are available in this section yet."
+                                    : "No answered fields in this section yet."}
+                                </div>
+                              )}
+                              {group.links.length > 0 ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {group.links.map((link) => (
+                                    <EligibilityDocumentLink
+                                      key={`${group.id}-${link.label}`}
+                                      label={link.label}
+                                      href={link.url as string}
+                                    />
+                                  ))}
+                                </div>
+                              ) : null}
+                            </EligibilitySectionCard>
                           ))}
                         </div>
 
@@ -2304,6 +2392,150 @@ function FlowStepCard({
       </div>
       <p className="text-xs leading-relaxed">{desc}</p>
     </div>
+  )
+}
+
+function EligibilitySummaryItem({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: string
+  hint?: string
+}) {
+  return (
+    <div className="rounded-xl border border-white/80 bg-white/80 px-3.5 py-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  )
+}
+
+function EligibilitySectionCard({
+  title,
+  icon,
+  tone,
+  expanded,
+  answeredCount,
+  totalCount,
+  onToggle,
+  children,
+}: {
+  title: string
+  icon: React.ReactNode
+  tone: "blue" | "indigo" | "amber" | "emerald"
+  expanded: boolean
+  answeredCount: number
+  totalCount: number
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  const styles = getEligibilityToneClasses(tone)
+
+  return (
+    <div className={`rounded-2xl border p-4 ${styles.card}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-3 text-left"
+        aria-expanded={expanded}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {icon}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+              {title}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {answeredCount}/{totalCount} fields answered
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles.badge}`}
+          >
+            {answeredCount}/{totalCount}
+          </span>
+          <span className="rounded-full border border-white/80 bg-white/80 p-1 text-slate-500">
+            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
+        </div>
+      </button>
+      {expanded ? <div className="mt-4">{children}</div> : null}
+    </div>
+  )
+}
+
+function EligibilityValueRow({
+  label,
+  value,
+  kind = "default",
+}: {
+  label: string
+  value: string
+  kind?: "default" | "block"
+}) {
+  const isBooleanValue = value === "Yes" || value === "No"
+
+  if (kind === "block") {
+    return (
+      <div className="rounded-xl border border-white/80 bg-white/85 px-4 py-3 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          {label}
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-slate-800">{value}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-white/80 bg-white/85 px-4 py-3 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          {label}
+        </span>
+        {isBooleanValue ? (
+          <span
+            className={`inline-flex self-start rounded-full px-2.5 py-1 text-xs font-semibold ${
+              value === "Yes"
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-rose-100 text-rose-700"
+            }`}
+          >
+            {value}
+          </span>
+        ) : (
+          <span className="text-sm font-semibold text-slate-800 sm:max-w-[58%] sm:text-right">
+            {value}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EligibilityDocumentLink({
+  label,
+  href,
+}: {
+  label: string
+  href: string
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
+    >
+      <ExternalLink size={14} />
+      {label}
+    </a>
   )
 }
 
