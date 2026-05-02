@@ -473,14 +473,14 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {/* <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <InsightCard label="Total Projects" value={String(pagination.totalItems)} helper="Across all pages" tone="slate" />
           <InsightCard label="Loaded Rows" value={String(projects.length)} helper={`Page ${pagination.currentPage}`} tone="blue" />
           <InsightCard label="In Progress" value={String(dashboardStats.active)} helper="Active pipeline" tone="emerald" />
           <InsightCard label="Completed" value={String(dashboardStats.completed)} helper="Current page total" tone="teal" />
           <InsightCard label="Needs Review" value={String(dashboardStats.attention)} helper="Missing data or unknown" tone="amber" />
           <InsightCard label="Recent Updates" value={String(dashboardStats.recent)} helper="Touched in last 7 days" tone="violet" />
-        </section>
+        </section> */}
 
         <section className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
           <div className="rounded-3xl border bg-white p-6 shadow-sm">
@@ -538,7 +538,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-6">
-            <div className="rounded-3xl border bg-white p-6 shadow-sm">
+            {/* <div className="rounded-3xl border bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-slate-900">Stage distribution</h2>
               <p className="mt-1 text-sm text-slate-500">Top stages from the currently loaded project set.</p>
 
@@ -566,7 +566,7 @@ export default function DashboardPage() {
                   ))
                 )}
               </div>
-            </div>
+            </div> */}
 
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-slate-900">Recently updated</h2>

@@ -1,10 +1,18 @@
 "use client"
 import CustomerJourney from "@/components/CustomerJourney"
 import Link from "next/link"
-import SendToAgentAnimation from "@/components/SendToAgentAnimation"
 import { useParams, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
 import axiosInstance from "@/lib/axiosinstance"
+import {
+  eligibilityFieldMappings,
+  getEligibilityApplicantName,
+  getEligibilityCorrespondenceAddress,
+  getEligibilityFieldValue,
+  getEligibilityResourceValue,
+  getEligibilitySiteAddress,
+  getFirstMappedValue,
+} from "@/lib/eligibility"
 import { useDocumentMediation } from "../documents/store"
 import {
   Phone,
@@ -16,16 +24,12 @@ import {
   Clock,
   Send,
   X,
-  ChevronRight,
   Upload,
   Building2,
   Calendar,
   Ruler,
   AlertTriangle,
   MessageSquare,
-  BadgeCheck,
-  CircleDot,
-  Circle,
   TrendingUp,
   StickyNote,
   Eye,
@@ -35,12 +39,10 @@ import {
   Home,
   Shield,
   TreePine,
-  Car,
   Droplets,
   Info,
   FileCheck,
   Video,
-  Briefcase,
   Bot,
   Headphones,
 } from "lucide-react"
@@ -64,114 +66,13 @@ type EligibilityCompletionStep = {
   completed: boolean
 }
 
-type EligibilityData = {
+type EligibilityData = Record<string, unknown> & {
   _id: string
   projectId: string
   status: string
   currentStep: number
   createdAt: string
   updatedAt: string
-  applicantAndProperty: {
-    agentDetails: {
-      agentAddress: string
-      agentContactEmailPhone: string
-      agentName: string
-      usesPlanningAgent: boolean
-    }
-    applicantDetails: {
-      contactEmailPhone: string
-      fullName: string
-      postcode: string
-      siteAddress: string
-    }
-    propertyAndOwnership: {
-      nearConservationAreaOrListedBuilding: string
-      ownershipStatus: string
-      propertyType: string
-      purposeOfDevelopment: string
-    }
-  }
-  worksAndMaterials: {
-    descriptionOfWorks: {
-      propsedWorksDescription: string
-      existingPropertyWidthM?: number
-      distanceFromBoundaryM?: number
-      existingPropertyHeightM?: number
-      proposedExtensionHeightM?: number
-      proposedExtensionWidthM?: number
-      ridgeOrEavesHeightM?: number
-    }
-    materials: {
-      colourOrFinishNotes: string
-      materialsMatchExisting: string
-      roofMaterials: string
-      wallMaterials: string
-    }
-    plansDrawingsPhotographs?: {
-      locationPlan?: string
-      additionalDrawings?: string
-      existingAndProposedElevations?: string
-      photographsOfSite?: string
-      sitePlan?: string
-    }
-  }
-  siteConstraints: {
-    accessAndParking?: {
-      accessOrParkingChanges: string
-      cycleStorageProvisions: string
-      newOrAlteredAccess: string
-    }
-    floodAndEnvironmentalRisk?: {
-      isSiteContaminatedLand: string
-      isSiteInFloodRiskArea: string
-      floodRiskAssesmentReport?: string
-    }
-    heritageAndListing?: {
-      isInConservationArea: string
-      isListedBuilding: string
-    }
-    preApplicationAdvice?: {
-      officerName: string
-      preApplicationAdviceSummary: string
-      preApplicationReferenceNumber: string
-      soughtPreAppAdvice: string
-    }
-    treesHedgesLandscaping?: {
-      treeSpecies: string
-      treesWithTPO: string
-      treesWithinFallingDistance: string
-      treeSurveyReport?: string
-    }
-  }
-  utilitiesAndConsents: {
-    additionalConsents: string
-    communityConsultation: string
-    ownershipCertificate: {
-      certificateOfOwnership: string
-      ownershipDetails: string
-    }
-    utilitiesAndWaste: {
-      existingWasteArrangements: string
-      renewableEnergyDetails: string
-      renewableEnergyProposals: string
-      sewageOrDrainage: string
-      surfaceWaterDrainage: string
-      waterSupply: string
-    }
-  }
-  declarations: {
-    digitalSignature: {
-      signatoryCapacity: string
-      signatoryFullName: string
-    }
-    reviewDeclarations: {
-      authorityConfirmed: boolean
-      feeAgreementAccepted: boolean
-      informationAccurate: boolean
-      privateRightsAcknowledged: boolean
-      publicDataConsent: boolean
-    }
-  }
   completionStatus: {
     totalSteps: number
     completedSteps: number
@@ -187,6 +88,225 @@ type EligibilityResponse = {
   message?: string
   data?: EligibilityData
 }
+
+type EligibilityFieldKey = keyof typeof eligibilityFieldMappings
+
+type EligibilityRow = {
+  label: string
+  value: string
+}
+
+const submissionApplicantFieldKeys: EligibilityFieldKey[] = [
+  "emailAddress",
+  "countryCode",
+  "phoneNumber",
+  "postcode",
+]
+
+const submissionPropertyFieldKeys: EligibilityFieldKey[] = [
+  "propertyType",
+  "ownershipStatus",
+  "purposeOfDevelopment",
+  "nearConservationAreaOrListedBuilding",
+]
+
+const dimensionFieldKeys: EligibilityFieldKey[] = [
+  "existingPropertyWidthM",
+  "existingPropertyDepthM",
+  "proposedExtensionWidthM",
+  "proposedExtensionDepthM",
+  "distanceFromBoundaryM",
+  "ridgeOrEavesHeightM",
+]
+
+const materialsFieldKeys: EligibilityFieldKey[] = [
+  "proposedWorksDescription",
+  "wallMaterials",
+  "roofMaterials",
+  "materialsMatchExisting",
+  "colourOrFinishNotes",
+]
+
+const constraintFieldKeys: EligibilityFieldKey[] = [
+  "isListedBuilding",
+  "isInConservationArea",
+  "isSiteInFloodRiskArea",
+  "isSiteContaminatedLand",
+  "newOrAlteredAccess",
+  "accessOrParkingChanges",
+  "cycleStorageProvisions",
+]
+
+const constraintSupportFieldKeys: EligibilityFieldKey[] = [
+  "soughtPreAppAdvice",
+  "preApplicationReferenceNumber",
+  "treesWithTPO",
+  "treeSpecies",
+  "treesWithinFallingDistance",
+  "additionalConsents",
+]
+
+const eligibilityDetailGroups: Array<{
+  id: string
+  title: string
+  tone: "blue" | "indigo" | "amber" | "emerald"
+  fieldKeys: EligibilityFieldKey[]
+  extraRows?: (eligibility: EligibilityData) => EligibilityRow[]
+}> = [
+  {
+    id: "applicant-property",
+    title: "Applicant + Property",
+    tone: "blue",
+    fieldKeys: [
+      "applicantFirstName",
+      "applicantMiddleName",
+      "applicantLastName",
+      "emailAddress",
+      "countryCode",
+      "phoneNumber",
+      "council",
+      "propertyType",
+      "ownershipStatus",
+      "purposeOfDevelopment",
+      "nearConservationAreaOrListedBuilding",
+      "usesPlanningAgent",
+      "agentName",
+      "agentContactEmailPhone",
+      "agentAddress",
+    ],
+    extraRows: (eligibility) => [
+      { label: "Site Address", value: getEligibilitySiteAddress(eligibility) ?? "-" },
+      { label: "Postcode", value: formatEligibilityFieldValue(eligibility, "postcode") },
+      {
+        label: "Alternate address for correspondence?",
+        value: formatEligibilityFieldValue(eligibility, "useAlternateCorrespondenceAddress"),
+      },
+      {
+        label: "Correspondence Address",
+        value: getEligibilityCorrespondenceAddress(eligibility) ?? "-",
+      },
+    ],
+  },
+  {
+    id: "council-history",
+    title: "Council / Previous Applications",
+    tone: "indigo",
+    fieldKeys: [
+      "hasPreviousCouncilApplication",
+      "previousProposalDetails",
+      "planningReferenceNumber",
+      "previousApplicationType",
+      "previousDevelopmentType",
+      "projectComparison",
+    ],
+  },
+  {
+    id: "property-occupancy",
+    title: "Property + Occupancy",
+    tone: "blue",
+    fieldKeys: [
+      "previouslyExtended",
+      "currentUseStatus",
+      "currentOccupantsCount",
+      "currentHouseholdArrangement",
+      "plannedOccupantsCount",
+      "sharedKitchenBathroom",
+      "roomsRentedIndividually",
+      "availableBedroomsCount",
+      "bathroomsOrShowerRoomsCount",
+      "hasCommunalKitchen",
+      "loungeDiningRoomAsBedroom",
+      "smallestBedroomSize",
+    ],
+  },
+  {
+    id: "works-materials",
+    title: "Works + Materials",
+    tone: "indigo",
+    fieldKeys: [
+      "proposedWorksDescription",
+      "existingPropertyWidthM",
+      "existingPropertyDepthM",
+      "proposedExtensionWidthM",
+      "proposedExtensionDepthM",
+      "ridgeOrEavesHeightM",
+      "distanceFromBoundaryM",
+      "totalInternalFloorArea",
+      "numberOfFloors",
+      "propertyFootprint",
+      "gardenDepth",
+      "plotWidth",
+      "kitchenRoomLengthM",
+      "kitchenRoomWidthM",
+      "bathroomRoomLengthM",
+      "bathroomRoomWidthM",
+      "wallMaterials",
+      "roofMaterials",
+      "colourOrFinishNotes",
+      "materialsMatchExisting",
+    ],
+  },
+  {
+    id: "site-constraints",
+    title: "Site Constraints",
+    tone: "amber",
+    fieldKeys: [
+      "isListedBuilding",
+      "isInConservationArea",
+      "newOrAlteredAccess",
+      "accessOrParkingChanges",
+      "proposedParkingSpaces",
+      "cycleStorageProvisions",
+      "treesWithTPO",
+      "treesWithinFallingDistance",
+      "treeSpecies",
+      "approximateTreeSizeM",
+      "isSiteInFloodRiskArea",
+      "isSiteContaminatedLand",
+      "soughtPreAppAdvice",
+      "preApplicationReferenceNumber",
+      "dateOfPreAppAdvice",
+      "officerName",
+      "preApplicationAdviceSummary",
+    ],
+  },
+  {
+    id: "utilities-consents",
+    title: "Utilities + Consents",
+    tone: "emerald",
+    fieldKeys: [
+      "smokeAlarmsInstalled",
+      "gasSafetyCertificate",
+      "electricalReportEicr",
+      "epcAvailable",
+      "waterSupply",
+      "sewageOrDrainage",
+      "surfaceWaterDrainage",
+      "existingWasteArrangements",
+      "renewableEnergyProposals",
+      "renewableEnergyDetails",
+      "certificateOfOwnership",
+      "ownershipDetails",
+      "additionalConsents",
+      "communityConsultation",
+    ],
+  },
+  {
+    id: "declarations",
+    title: "Declarations",
+    tone: "blue",
+    fieldKeys: [
+      "informationAccurate",
+      "authorityConfirmed",
+      "privateRightsAcknowledged",
+      "publicDataConsent",
+      "feeAgreementAccepted",
+      "signatoryFullName",
+      "signedDate",
+      "signatoryCapacity",
+    ],
+  },
+]
 
 function getInitialSection(sectionParam: string | null): SectionId {
   if (sectionParam === "communication" || sectionParam === "chat") {
@@ -303,6 +423,54 @@ function formatEligibilityStatus(status?: string | null) {
     .join(" ")
 }
 
+function formatEligibilityFieldValue(
+  eligibility: EligibilityData | null,
+  fieldKey: EligibilityFieldKey
+): string {
+  if (!eligibility) return "-"
+
+  const mapping = eligibilityFieldMappings[fieldKey]
+  const value = getEligibilityFieldValue(eligibility, fieldKey)
+
+  if (mapping.format === "date") {
+    return typeof value === "string" ? formatDateValue(value) : "-"
+  }
+
+  return formatDisplayValue(value)
+}
+
+function buildEligibilityRows(
+  eligibility: EligibilityData | null,
+  fieldKeys: EligibilityFieldKey[]
+): EligibilityRow[] {
+  if (!eligibility) return []
+
+  return fieldKeys.map((fieldKey) => ({
+    label: eligibilityFieldMappings[fieldKey].label,
+    value: formatEligibilityFieldValue(eligibility, fieldKey),
+  }))
+}
+
+function formatDimensionSummary(first: string, second: string) {
+  if (first === "-" || second === "-") return "-"
+  return `${first}m x ${second}m`
+}
+
+function getToneIcon(tone: "blue" | "indigo" | "amber" | "emerald") {
+  switch (tone) {
+    case "blue":
+      return <Home size={14} className="text-blue-600" />
+    case "indigo":
+      return <Ruler size={14} className="text-indigo-600" />
+    case "amber":
+      return <Shield size={14} className="text-amber-600" />
+    case "emerald":
+      return <Droplets size={14} className="text-emerald-600" />
+    default:
+      return <FileCheck size={14} className="text-blue-600" />
+  }
+}
+
 function buildRoadmapWithEligibility(
   baseRoadmap: WorkspaceRoadmapResponse,
   eligibility: EligibilityData | null
@@ -347,7 +515,6 @@ export default function UserDetailsPage() {
   const projectId = Array.isArray(id) ? id[0] : id
   const searchParams = useSearchParams()
   const {
-    notifyMissingDocsSentToAgentX,
     notifyRequiredDocsSentToAgentY,
     logs,
     requiredForCustomer,
@@ -366,7 +533,6 @@ export default function UserDetailsPage() {
   const [notes, setNotes] = useState([
     "Client confirmed boundary survey booked for 24 Feb.",
   ])
-  const [showSendAnimation, setShowSendAnimation] = useState(false)
   const [activeSection, setActiveSection] = useState<SectionId>(selectedSection)
   const [baseRoadmap, setBaseRoadmap] = useState<WorkspaceRoadmapResponse>(
     defaultWorkspaceRoadmap
@@ -594,49 +760,152 @@ export default function UserDetailsPage() {
     eligibilityData?.completionStatus.steps
       .filter((step) => !step.completed)
       .map((step) => step.label) ?? []
-  const applicantDetails = eligibilityData?.applicantAndProperty.applicantDetails
-  const propertyDetails = eligibilityData?.applicantAndProperty.propertyAndOwnership
-  const agentDetails = eligibilityData?.applicantAndProperty.agentDetails
-  const worksDetails = eligibilityData?.worksAndMaterials.descriptionOfWorks
-  const materialDetails = eligibilityData?.worksAndMaterials.materials
-  const planDetails = eligibilityData?.worksAndMaterials.plansDrawingsPhotographs
-  const siteConstraints = eligibilityData?.siteConstraints
-  const accessAndParking = siteConstraints?.accessAndParking
-  const floodAndEnvironmentalRisk = siteConstraints?.floodAndEnvironmentalRisk
-  const heritageAndListing = siteConstraints?.heritageAndListing
-  const preApplicationAdvice = siteConstraints?.preApplicationAdvice
-  const treesHedgesLandscaping = siteConstraints?.treesHedgesLandscaping
-  const utilitiesAndConsents = eligibilityData?.utilitiesAndConsents
-  const declarationDetails = eligibilityData?.declarations
+  const applicantName = eligibilityData ? getEligibilityApplicantName(eligibilityData) ?? "-" : "-"
+  const applicantEmail = formatEligibilityFieldValue(eligibilityData, "emailAddress")
+  const applicantPhone = formatDisplayValue(
+    eligibilityData
+      ? getEligibilityFieldValue(eligibilityData, "phoneNumber") ??
+          getFirstMappedValue(eligibilityData, [
+            ["applicantAndProperty", "applicantDetails", "contactEmailPhone"],
+          ])
+      : undefined
+  )
+  const siteAddress = eligibilityData ? getEligibilitySiteAddress(eligibilityData) ?? "-" : "-"
+  const postcode = formatEligibilityFieldValue(eligibilityData, "postcode")
+  const purposeOfDevelopment = formatEligibilityFieldValue(
+    eligibilityData,
+    "purposeOfDevelopment"
+  )
+  const propertyType = formatEligibilityFieldValue(eligibilityData, "propertyType")
+  const ownershipStatus = formatEligibilityFieldValue(
+    eligibilityData,
+    "ownershipStatus"
+  )
+  const existingPropertyWidth = formatEligibilityFieldValue(
+    eligibilityData,
+    "existingPropertyWidthM"
+  )
+  const existingPropertyDepth = formatEligibilityFieldValue(
+    eligibilityData,
+    "existingPropertyDepthM"
+  )
+  const proposedExtensionWidth = formatEligibilityFieldValue(
+    eligibilityData,
+    "proposedExtensionWidthM"
+  )
+  const proposedExtensionDepth = formatEligibilityFieldValue(
+    eligibilityData,
+    "proposedExtensionDepthM"
+  )
+  const proposedWorksDescription = formatEligibilityFieldValue(
+    eligibilityData,
+    "proposedWorksDescription"
+  )
+  const wallMaterials = formatEligibilityFieldValue(eligibilityData, "wallMaterials")
+  const listedBuilding = formatEligibilityFieldValue(eligibilityData, "isListedBuilding")
+  const treesWithTPO = formatEligibilityFieldValue(eligibilityData, "treesWithTPO")
+  const floodRiskArea = formatEligibilityFieldValue(
+    eligibilityData,
+    "isSiteInFloodRiskArea"
+  )
+  const vehicleAccess = formatEligibilityFieldValue(
+    eligibilityData,
+    "newOrAlteredAccess"
+  )
+  const preAppAdvice = formatEligibilityFieldValue(
+    eligibilityData,
+    "soughtPreAppAdvice"
+  )
+  const additionalConsents = formatEligibilityFieldValue(
+    eligibilityData,
+    "additionalConsents"
+  )
+  const councilName = formatEligibilityFieldValue(eligibilityData, "council")
+  const councilReference = formatEligibilityFieldValue(
+    eligibilityData,
+    "planningReferenceNumber"
+  )
+  const locationPlanUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "locationPlan")
+    : undefined
+  const sitePlanUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "sitePlan")
+    : undefined
+  const existingAndProposedElevationsUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "existingAndProposedElevations")
+    : undefined
+  const additionalDrawingsUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "additionalDrawings")
+    : undefined
+  const photographsOfSiteUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "photographsOfSite")
+    : undefined
+  const floodRiskAssessmentReportUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "floodRiskAssessmentReport")
+    : undefined
+  const treeSurveyReportUrl = eligibilityData
+    ? getEligibilityResourceValue(eligibilityData, "treeSurveyReport")
+    : undefined
+  const submissionApplicantRows = eligibilityData
+    ? [
+        { label: "Applicant Name", value: applicantName },
+        { label: "Site Address", value: siteAddress },
+        ...buildEligibilityRows(eligibilityData, submissionApplicantFieldKeys),
+      ]
+    : []
+  const submissionPropertyRows = eligibilityData
+    ? buildEligibilityRows(eligibilityData, submissionPropertyFieldKeys)
+    : []
+  const dimensionsRows = eligibilityData
+    ? buildEligibilityRows(eligibilityData, dimensionFieldKeys)
+    : []
+  const materialsRows = eligibilityData
+    ? buildEligibilityRows(eligibilityData, materialsFieldKeys)
+    : []
+  const constraintRows = eligibilityData
+    ? buildEligibilityRows(eligibilityData, constraintFieldKeys)
+    : []
+  const constraintSupportRows = eligibilityData
+    ? buildEligibilityRows(eligibilityData, constraintSupportFieldKeys)
+    : []
+  const eligibilityDetailSections = eligibilityData
+    ? eligibilityDetailGroups.map((group) => ({
+        ...group,
+        rows: [
+          ...buildEligibilityRows(eligibilityData, group.fieldKeys),
+          ...(group.extraRows ? group.extraRows(eligibilityData) : []),
+        ],
+      }))
+    : []
   const customer = {
-    name: formatDisplayValue(applicantDetails?.fullName),
-    phone: formatDisplayValue(applicantDetails?.contactEmailPhone),
-    email: "-",
-    location: formatDisplayValue(applicantDetails?.siteAddress),
+    name: applicantName,
+    phone: applicantPhone,
+    email: applicantEmail,
+    location: siteAddress,
     status: eligibilityData ? formatEligibilityStatus(eligibilityData.status) : "Live Data Pending",
   }
   const formSubmission = {
-    applicantName: formatDisplayValue(applicantDetails?.fullName),
-    contactEmail: "-",
-    contactPhone: formatDisplayValue(applicantDetails?.contactEmailPhone),
-    siteAddress: formatDisplayValue(applicantDetails?.siteAddress),
-    postcode: formatDisplayValue(applicantDetails?.postcode),
-    propertyType: formatDisplayValue(propertyDetails?.propertyType),
-    ownershipStatus: formatDisplayValue(propertyDetails?.ownershipStatus),
-    conservationArea: formatDisplayValue(heritageAndListing?.isInConservationArea),
-    purposeOfDevelopment: formatDisplayValue(propertyDetails?.purposeOfDevelopment),
-    existingWidth: formatDisplayValue(worksDetails?.existingPropertyWidthM),
-    existingDepth: formatDisplayValue(worksDetails?.distanceFromBoundaryM),
-    proposedExtensionDepth: formatDisplayValue(worksDetails?.proposedExtensionWidthM),
-    proposedExtensionHeight: formatDisplayValue(worksDetails?.proposedExtensionHeightM),
-    externalMaterials: formatDisplayValue(materialDetails?.wallMaterials),
-    briefDescription: formatDisplayValue(worksDetails?.propsedWorksDescription),
-    listedBuilding: formatDisplayValue(heritageAndListing?.isListedBuilding),
-    tpo: formatDisplayValue(treesHedgesLandscaping?.treesWithTPO),
-    floodZone: formatDisplayValue(floodAndEnvironmentalRisk?.isSiteInFloodRiskArea),
-    vehicleAccess: formatDisplayValue(accessAndParking?.newOrAlteredAccess),
-    preApplicationAdvice: formatDisplayValue(preApplicationAdvice?.soughtPreAppAdvice),
-    additionalConsents: formatDisplayValue(utilitiesAndConsents?.additionalConsents),
+    applicantName,
+    contactEmail: applicantEmail,
+    contactPhone: applicantPhone,
+    siteAddress,
+    postcode,
+    propertyType,
+    ownershipStatus,
+    conservationArea: formatEligibilityFieldValue(eligibilityData, "isInConservationArea"),
+    purposeOfDevelopment,
+    existingWidth: existingPropertyWidth,
+    existingDepth: existingPropertyDepth,
+    proposedExtensionWidth,
+    proposedExtensionDepth,
+    externalMaterials: wallMaterials,
+    briefDescription: proposedWorksDescription,
+    listedBuilding,
+    tpo: treesWithTPO,
+    floodZone: floodRiskArea,
+    vehicleAccess,
+    preApplicationAdvice: preAppAdvice,
+    additionalConsents,
     consultationBooked: false,
     consultationDate: "-",
     consultationTime: "-",
@@ -648,17 +917,17 @@ export default function UserDetailsPage() {
   const project = {
     id: projectId ?? "Unknown",
     clientId: "-",
-    clientName: formatDisplayValue(applicantDetails?.fullName),
+    clientName: applicantName,
     title: `Project ${projectId ?? "Unknown"}`,
     description: eligibilityData
       ? "Live project details derived from the connected eligibility record."
       : "No live project metadata connected yet.",
-    service: formatDisplayValue(propertyDetails?.purposeOfDevelopment),
-    serviceType: formatDisplayValue(propertyDetails?.propertyType),
+    service: purposeOfDevelopment,
+    serviceType: propertyType,
     serviceNo: "-",
     stage: activeRoadmapStage?.label ?? "Unknown",
-    location: formatDisplayValue(applicantDetails?.siteAddress),
-    postcode: formatDisplayValue(applicantDetails?.postcode),
+    location: siteAddress,
+    postcode,
     status: eligibilityData?.status ?? "live_data_pending",
     createdDate: eligibilityData?.createdAt ?? "",
     updatedDate: eligibilityData?.updatedAt ?? "",
@@ -667,13 +936,13 @@ export default function UserDetailsPage() {
     architect: "-",
     progress: eligibilityData?.completionStatus.percentage ?? 0,
     estimatedCompletionDate: eligibilityData?.updatedAt ?? "",
-    councilReference: "-",
-    councilName: "-",
+    councilReference,
+    councilName,
     timeline: "-",
   }
   const requirements = {
-    propertyType: formatDisplayValue(propertyDetails?.propertyType),
-    locationType: formatDisplayValue(applicantDetails?.siteAddress),
+    propertyType,
+    locationType: siteAddress,
     timeline: "-",
     scope: [
       formSubmission.purposeOfDevelopment,
@@ -840,21 +1109,16 @@ export default function UserDetailsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <OverviewCard title="Applicant Details" icon={<User size={14} className="text-blue-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Applicant" value={applicantDetails?.fullName} />
-                        <InfoPair label="Contact" value={applicantDetails?.contactEmailPhone} />
-                        <InfoPair label="Site Address" value={applicantDetails?.siteAddress} />
-                        <InfoPair label="Postcode" value={applicantDetails?.postcode} />
+                        {submissionApplicantRows.map((row) => (
+                          <InfoPair key={row.label} label={row.label} value={row.value} />
+                        ))}
                       </div>
                     </OverviewCard>
                     <OverviewCard title="Property Details" icon={<Home size={14} className="text-emerald-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Property Type" value={propertyDetails?.propertyType} />
-                        <InfoPair label="Ownership" value={propertyDetails?.ownershipStatus} />
-                        <InfoPair label="Purpose" value={propertyDetails?.purposeOfDevelopment} />
-                        <InfoPair
-                          label="Near Conservation / Listed"
-                          value={propertyDetails?.nearConservationAreaOrListedBuilding}
-                        />
+                        {submissionPropertyRows.map((row) => (
+                          <InfoPair key={row.label} label={row.label} value={row.value} />
+                        ))}
                       </div>
                     </OverviewCard>
                   </div>
@@ -879,24 +1143,19 @@ export default function UserDetailsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <OverviewCard title="Dimensions" icon={<Ruler size={14} className="text-blue-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Existing Width (m)" value={worksDetails?.existingPropertyWidthM} />
-                        <InfoPair label="Existing Height (m)" value={worksDetails?.existingPropertyHeightM} />
-                        <InfoPair label="Proposed Width (m)" value={worksDetails?.proposedExtensionWidthM} />
-                        <InfoPair label="Proposed Height (m)" value={worksDetails?.proposedExtensionHeightM} />
-                        <InfoPair label="Distance From Boundary (m)" value={worksDetails?.distanceFromBoundaryM} />
-                        <InfoPair label="Ridge / Eaves Height (m)" value={worksDetails?.ridgeOrEavesHeightM} />
+                        {dimensionsRows.map((row) => (
+                          <InfoPair key={row.label} label={row.label} value={row.value} />
+                        ))}
                       </div>
                     </OverviewCard>
                     <OverviewCard title="Materials + Drawings" icon={<Building2 size={14} className="text-amber-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Works Description" value={worksDetails?.propsedWorksDescription} />
-                        <InfoPair label="Wall Materials" value={materialDetails?.wallMaterials} />
-                        <InfoPair label="Roof Materials" value={materialDetails?.roofMaterials} />
-                        <InfoPair label="Match Existing" value={materialDetails?.materialsMatchExisting} />
-                        <InfoPair label="Colour Notes" value={materialDetails?.colourOrFinishNotes} />
-                        {planDetails?.locationPlan ? (
+                        {materialsRows.map((row) => (
+                          <InfoPair key={row.label} label={row.label} value={row.value} />
+                        ))}
+                        {typeof locationPlanUrl === "string" ? (
                           <a
-                            href={planDetails.locationPlan}
+                            href={locationPlanUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
@@ -929,23 +1188,16 @@ export default function UserDetailsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <OverviewCard title="Site Constraints" icon={<AlertTriangle size={14} className="text-amber-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Listed Building" value={heritageAndListing?.isListedBuilding} />
-                        <InfoPair label="Conservation Area" value={heritageAndListing?.isInConservationArea} />
-                        <InfoPair label="Flood Risk Area" value={floodAndEnvironmentalRisk?.isSiteInFloodRiskArea} />
-                        <InfoPair label="Contaminated Land" value={floodAndEnvironmentalRisk?.isSiteContaminatedLand} />
-                        <InfoPair label="New / Altered Access" value={accessAndParking?.newOrAlteredAccess} />
-                        <InfoPair label="Access / Parking Changes" value={accessAndParking?.accessOrParkingChanges} />
-                        <InfoPair label="Cycle Storage" value={accessAndParking?.cycleStorageProvisions} />
+                        {constraintRows.map((row) => (
+                          <InfoPair key={row.label} label={row.label} value={row.value} />
+                        ))}
                       </div>
                     </OverviewCard>
                     <OverviewCard title="Trees + Consents" icon={<TreePine size={14} className="text-emerald-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Pre-App Advice Sought" value={preApplicationAdvice?.soughtPreAppAdvice} />
-                        <InfoPair label="Pre-App Ref" value={preApplicationAdvice?.preApplicationReferenceNumber} />
-                        <InfoPair label="Trees with TPO" value={treesHedgesLandscaping?.treesWithTPO} />
-                        <InfoPair label="Tree Species" value={treesHedgesLandscaping?.treeSpecies} />
-                        <InfoPair label="Trees Within Falling Distance" value={treesHedgesLandscaping?.treesWithinFallingDistance} />
-                        <InfoPair label="Additional Consents" value={utilitiesAndConsents?.additionalConsents} />
+                        {constraintSupportRows.map((row) => (
+                          <InfoPair key={row.label} label={row.label} value={row.value} />
+                        ))}
                       </div>
                     </OverviewCard>
                   </div>
@@ -1070,251 +1322,97 @@ export default function UserDetailsPage() {
                     ) : eligibilityData ? (
                       <div className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
-                          <OverviewCard
-                            title="Applicant + Property"
-                            icon={<Home size={14} className="text-blue-600" />}
-                          >
-                            <div className="space-y-2 text-sm text-slate-700">
-                              <InfoPair label="Applicant" value={eligibilityData.applicantAndProperty.applicantDetails.fullName} />
-                              <InfoPair label="Contact" value={eligibilityData.applicantAndProperty.applicantDetails.contactEmailPhone} />
-                              <InfoPair label="Site Address" value={eligibilityData.applicantAndProperty.applicantDetails.siteAddress} />
-                              <InfoPair label="Postcode" value={eligibilityData.applicantAndProperty.applicantDetails.postcode} />
-                              <InfoPair label="Property Type" value={eligibilityData.applicantAndProperty.propertyAndOwnership.propertyType} />
-                              <InfoPair label="Ownership" value={eligibilityData.applicantAndProperty.propertyAndOwnership.ownershipStatus} />
-                              <InfoPair label="Purpose" value={eligibilityData.applicantAndProperty.propertyAndOwnership.purposeOfDevelopment} />
-                              <InfoPair
-                                label="Near Conservation / Listed"
-                                value={eligibilityData.applicantAndProperty.propertyAndOwnership.nearConservationAreaOrListedBuilding}
-                              />
-                              <InfoPair
-                                label="Uses Planning Agent"
-                                value={eligibilityData.applicantAndProperty.agentDetails.usesPlanningAgent}
-                              />
-                              <InfoPair label="Agent Name" value={eligibilityData.applicantAndProperty.agentDetails.agentName} />
-                              <InfoPair
-                                label="Agent Contact"
-                                value={eligibilityData.applicantAndProperty.agentDetails.agentContactEmailPhone}
-                              />
-                              <InfoPair
-                                label="Agent Address"
-                                value={eligibilityData.applicantAndProperty.agentDetails.agentAddress}
-                              />
-                            </div>
-                          </OverviewCard>
-
-                          <OverviewCard
-                            title="Works + Materials"
-                            icon={<Ruler size={14} className="text-indigo-600" />}
-                          >
-                            <div className="space-y-2 text-sm text-slate-700">
-                              <InfoPair
-                                label="Works Description"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.propsedWorksDescription}
-                              />
-                              <InfoPair label="Wall Materials" value={eligibilityData.worksAndMaterials.materials.wallMaterials} />
-                              <InfoPair label="Roof Materials" value={eligibilityData.worksAndMaterials.materials.roofMaterials} />
-                              <InfoPair label="Match Existing" value={eligibilityData.worksAndMaterials.materials.materialsMatchExisting} />
-                              <InfoPair label="Colour Notes" value={eligibilityData.worksAndMaterials.materials.colourOrFinishNotes} />
-                              <InfoPair
-                                label="Existing Width (m)"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.existingPropertyWidthM}
-                              />
-                              <InfoPair
-                                label="Existing Height (m)"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.existingPropertyHeightM}
-                              />
-                              <InfoPair
-                                label="Proposed Width (m)"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.proposedExtensionWidthM}
-                              />
-                              <InfoPair
-                                label="Proposed Height (m)"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.proposedExtensionHeightM}
-                              />
-                              <InfoPair
-                                label="Distance From Boundary (m)"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.distanceFromBoundaryM}
-                              />
-                              <InfoPair
-                                label="Ridge / Eaves Height (m)"
-                                value={eligibilityData.worksAndMaterials.descriptionOfWorks.ridgeOrEavesHeightM}
-                              />
-                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.locationPlan ? (
-                                <a
-                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.locationPlan}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open location plan
-                                </a>
-                              ) : null}
-                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.sitePlan ? (
-                                <a
-                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.sitePlan}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open site plan
-                                </a>
-                              ) : null}
-                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.existingAndProposedElevations ? (
-                                <a
-                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.existingAndProposedElevations}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open elevations
-                                </a>
-                              ) : null}
-                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.additionalDrawings ? (
-                                <a
-                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.additionalDrawings}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open additional drawings
-                                </a>
-                              ) : null}
-                              {eligibilityData.worksAndMaterials.plansDrawingsPhotographs?.photographsOfSite ? (
-                                <a
-                                  href={eligibilityData.worksAndMaterials.plansDrawingsPhotographs.photographsOfSite}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open site photographs
-                                </a>
-                              ) : null}
-                            </div>
-                          </OverviewCard>
-
-                          <OverviewCard
-                            title="Site Constraints"
-                            icon={<Shield size={14} className="text-amber-600" />}
-                          >
-                            <div className="space-y-2 text-sm text-slate-700">
-                              <InfoPair label="Listed Building" value={heritageAndListing?.isListedBuilding} />
-                              <InfoPair label="Conservation Area" value={heritageAndListing?.isInConservationArea} />
-                              <InfoPair label="Flood Risk Area" value={floodAndEnvironmentalRisk?.isSiteInFloodRiskArea} />
-                              <InfoPair label="Contaminated Land" value={floodAndEnvironmentalRisk?.isSiteContaminatedLand} />
-                              <InfoPair label="New or Altered Access" value={accessAndParking?.newOrAlteredAccess} />
-                              <InfoPair label="Parking Changes" value={accessAndParking?.accessOrParkingChanges} />
-                              <InfoPair label="Cycle Storage" value={accessAndParking?.cycleStorageProvisions} />
-                              <InfoPair label="Pre-App Advice Sought" value={preApplicationAdvice?.soughtPreAppAdvice} />
-                              <InfoPair label="Officer Name" value={preApplicationAdvice?.officerName} />
-                              <InfoPair
-                                label="Pre-App Reference"
-                                value={preApplicationAdvice?.preApplicationReferenceNumber}
-                              />
-                              <InfoPair
-                                label="Pre-App Summary"
-                                value={preApplicationAdvice?.preApplicationAdviceSummary}
-                              />
-                              <InfoPair label="Trees with TPO" value={treesHedgesLandscaping?.treesWithTPO} />
-                              <InfoPair label="Tree Species" value={treesHedgesLandscaping?.treeSpecies} />
-                              <InfoPair
-                                label="Trees Within Falling Distance"
-                                value={treesHedgesLandscaping?.treesWithinFallingDistance}
-                              />
-                              {floodAndEnvironmentalRisk?.floodRiskAssesmentReport ? (
-                                <a
-                                  href={floodAndEnvironmentalRisk.floodRiskAssesmentReport}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open flood risk assessment
-                                </a>
-                              ) : null}
-                              {treesHedgesLandscaping?.treeSurveyReport ? (
-                                <a
-                                  href={treesHedgesLandscaping.treeSurveyReport}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink size={14} />
-                                  Open tree survey report
-                                </a>
-                              ) : null}
-                            </div>
-                          </OverviewCard>
-
-                          <OverviewCard
-                            title="Utilities + Consents"
-                            icon={<Droplets size={14} className="text-emerald-600" />}
-                          >
-                            <div className="space-y-2 text-sm text-slate-700">
-                              <InfoPair label="Additional Consents" value={eligibilityData.utilitiesAndConsents.additionalConsents} />
-                              <InfoPair label="Community Consultation" value={eligibilityData.utilitiesAndConsents.communityConsultation} />
-                              <InfoPair label="Water Supply" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.waterSupply} />
-                              <InfoPair label="Drainage" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.sewageOrDrainage} />
-                              <InfoPair label="Surface Water Drainage" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.surfaceWaterDrainage} />
-                              <InfoPair label="Renewable Energy" value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.renewableEnergyProposals} />
-                              <InfoPair
-                                label="Renewable Energy Details"
-                                value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.renewableEnergyDetails}
-                              />
-                              <InfoPair
-                                label="Existing Waste Arrangements"
-                                value={eligibilityData.utilitiesAndConsents.utilitiesAndWaste.existingWasteArrangements}
-                              />
-                              <InfoPair
-                                label="Ownership Certificate"
-                                value={eligibilityData.utilitiesAndConsents.ownershipCertificate.certificateOfOwnership}
-                              />
-                              <InfoPair
-                                label="Ownership Details"
-                                value={eligibilityData.utilitiesAndConsents.ownershipCertificate.ownershipDetails}
-                              />
-                            </div>
-                          </OverviewCard>
-
-                          <OverviewCard
-                            title="Declaration"
-                            icon={<BadgeCheck size={14} className="text-blue-600" />}
-                          >
-                            <div className="space-y-2 text-sm text-slate-700">
-                              <InfoPair
-                                label="Signatory Capacity"
-                                value={eligibilityData.declarations.digitalSignature.signatoryCapacity}
-                              />
-                              <InfoPair
-                                label="Signatory Name"
-                                value={eligibilityData.declarations.digitalSignature.signatoryFullName}
-                              />
-                              <InfoPair
-                                label="Authority Confirmed"
-                                value={eligibilityData.declarations.reviewDeclarations.authorityConfirmed}
-                              />
-                              <InfoPair
-                                label="Fee Agreement Accepted"
-                                value={eligibilityData.declarations.reviewDeclarations.feeAgreementAccepted}
-                              />
-                              <InfoPair
-                                label="Information Accurate"
-                                value={eligibilityData.declarations.reviewDeclarations.informationAccurate}
-                              />
-                              <InfoPair
-                                label="Private Rights Acknowledged"
-                                value={eligibilityData.declarations.reviewDeclarations.privateRightsAcknowledged}
-                              />
-                              <InfoPair
-                                label="Public Data Consent"
-                                value={eligibilityData.declarations.reviewDeclarations.publicDataConsent}
-                              />
-                            </div>
-                          </OverviewCard>
+                          {eligibilityDetailSections.map((group) => (
+                            <OverviewCard
+                              key={group.id}
+                              title={group.title}
+                              icon={getToneIcon(group.tone)}
+                            >
+                              <div className="space-y-2 text-sm text-slate-700">
+                                {group.rows.map((row) => (
+                                  <InfoPair key={`${group.id}-${row.label}`} label={row.label} value={row.value} />
+                                ))}
+                                {group.id === "works-materials" && typeof locationPlanUrl === "string" ? (
+                                  <a
+                                    href={locationPlanUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open location plan
+                                  </a>
+                                ) : null}
+                                {group.id === "works-materials" && typeof sitePlanUrl === "string" ? (
+                                  <a
+                                    href={sitePlanUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open site plan
+                                  </a>
+                                ) : null}
+                                {group.id === "works-materials" && typeof existingAndProposedElevationsUrl === "string" ? (
+                                  <a
+                                    href={existingAndProposedElevationsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open elevations
+                                  </a>
+                                ) : null}
+                                {group.id === "works-materials" && typeof additionalDrawingsUrl === "string" ? (
+                                  <a
+                                    href={additionalDrawingsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open additional drawings
+                                  </a>
+                                ) : null}
+                                {group.id === "works-materials" && typeof photographsOfSiteUrl === "string" ? (
+                                  <a
+                                    href={photographsOfSiteUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open site photographs
+                                  </a>
+                                ) : null}
+                                {group.id === "site-constraints" &&
+                                typeof floodRiskAssessmentReportUrl === "string" ? (
+                                  <a
+                                    href={floodRiskAssessmentReportUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open flood risk assessment
+                                  </a>
+                                ) : null}
+                                {group.id === "site-constraints" && typeof treeSurveyReportUrl === "string" ? (
+                                  <a
+                                    href={treeSurveyReportUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink size={14} />
+                                    Open tree survey report
+                                  </a>
+                                ) : null}
+                              </div>
+                            </OverviewCard>
+                          ))}
                         </div>
 
                       </div>
@@ -1403,12 +1501,22 @@ export default function UserDetailsPage() {
                   >
                     <div className="space-y-2 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Existing</span>
-                        <span className="font-semibold text-slate-800">{formSubmission.existingWidth}m x {formSubmission.existingDepth}m</span>
+                        <span className="text-slate-500">Existing width × depth</span>
+                        <span className="font-semibold text-slate-800">
+                          {formatDimensionSummary(
+                            formSubmission.existingWidth,
+                            formSubmission.existingDepth
+                          )}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Proposed</span>
-                        <span className="font-semibold text-blue-800">{formSubmission.proposedExtensionDepth} x {formSubmission.proposedExtensionHeight}</span>
+                        <span className="text-slate-500">Proposed width × depth</span>
+                        <span className="font-semibold text-blue-800">
+                          {formatDimensionSummary(
+                            formSubmission.proposedExtensionWidth,
+                            formSubmission.proposedExtensionDepth
+                          )}
+                        </span>
                       </div>
                     </div>
                   </OverviewCard>
@@ -2258,103 +2366,6 @@ function OverviewCard({
         </p>
       </div>
       {children}
-    </div>
-  )
-}
-
-function DetailCard({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string
-  value: string
-  highlight?: boolean
-}) {
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${
-      highlight ? "bg-blue-50 border-blue-200" : "bg-slate-50"
-    }`}>
-      <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
-        {label}
-      </p>
-      <p className={`text-sm font-semibold ${
-        highlight ? "text-blue-900" : "text-slate-800"
-      }`}>
-        {value}
-      </p>
-    </div>
-  )
-}
-
-function DimensionRow({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string
-  value: string
-  highlight?: boolean
-}) {
-  return (
-    <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-      highlight ? "bg-blue-100" : "bg-white border"
-    }`}>
-      <span className={`text-sm ${
-        highlight ? "text-blue-900 font-semibold" : "text-slate-600"
-      }`}>
-        {label}
-      </span>
-      <span className={`text-sm font-bold ${
-        highlight ? "text-blue-900" : "text-slate-900"
-      }`}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function ConstraintCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  color: "green" | "blue" | "red"
-}) {
-  const colors = {
-    green: {
-      bg: "bg-emerald-50",
-      border: "border-emerald-200",
-      icon: "text-emerald-600",
-      text: "text-emerald-900",
-    },
-    blue: {
-      bg: "bg-blue-50",
-      border: "border-blue-200",
-      icon: "text-blue-600",
-      text: "text-blue-900",
-    },
-    red: {
-      bg: "bg-rose-50",
-      border: "border-rose-200",
-      icon: "text-rose-600",
-      text: "text-rose-900",
-    },
-  }
-
-  const style = colors[color]
-
-  return (
-    <div className={`rounded-xl border ${style.bg} ${style.border} px-4 py-3`}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className={style.icon}>{icon}</span>
-        <p className={`text-xs font-semibold ${style.text}`}>{label}</p>
-      </div>
-      <p className={`text-sm font-bold ${style.text}`}>{value}</p>
     </div>
   )
 }
