@@ -85,7 +85,7 @@ export default function WorkspaceHeader({ projectId }: WorkspaceHeaderProps) {
   }
 
   return (
-    <div className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur-sm">
+    <div className="top-0 z-40 border-b bg-white/95 backdrop-blur-sm">
       <div className="mx-auto max-w-[1600px] px-6 py-4 lg:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">

@@ -116,31 +116,31 @@ type EligibilityData = {
     }
   }
   siteConstraints: {
-    accessAndParking: {
+    accessAndParking?: {
       accessOrParkingChanges: string
       cycleStorageProvisions: string
       newOrAlteredAccess: string
     }
-    floodAndEnvironmentalRisk: {
+    floodAndEnvironmentalRisk?: {
       isSiteContaminatedLand: string
       isSiteInFloodRiskArea: string
       floodRiskAssesmentReport?: string
     }
-    heritageAndListing: {
+    heritageAndListing?: {
       isInConservationArea: string
       isListedBuilding: string
     }
-    preApplicationAdvice: {
+    preApplicationAdvice?: {
       officerName: string
       preApplicationAdviceSummary: string
       preApplicationReferenceNumber: string
       soughtPreAppAdvice: string
     }
-    treesHedgesLandscaping: {
+    treesHedgesLandscaping?: {
       treeSpecies: string
       treesWithTPO: string
       treesWithinFallingDistance: string
-      treeSurveyReport: string
+      treeSurveyReport?: string
     }
   }
   utilitiesAndConsents: {
@@ -237,13 +237,50 @@ function resolveRoadmapHref(hrefTemplate: string, projectId?: string) {
   return hrefTemplate.replace(":projectId", encodeURIComponent(projectId))
 }
 
-function formatDisplayValue(value?: string | number | boolean | null) {
+function formatDisplayValue(value?: unknown): string {
   if (value === null || value === undefined) return "-"
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (typeof value === "number") return String(value)
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : "-"
+  }
 
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : "-"
+  if (Array.isArray(value)) {
+    const items: string[] = value
+      .map((item) => formatDisplayValue(item))
+      .filter((item) => item !== "-")
+    return items.length > 0 ? items.join(", ") : "-"
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>
+    const preferredKeys = [
+      "fullAddress",
+      "address",
+      "siteAddress",
+      "label",
+      "name",
+      "value",
+      "title",
+      "description",
+      "text",
+      "postcode",
+    ] as const
+
+    for (const key of preferredKeys) {
+      const candidate = record[key]
+      const formatted: string = formatDisplayValue(candidate)
+      if (formatted !== "-") return formatted
+    }
+
+    const values: string[] = Object.values(record)
+      .map((item) => formatDisplayValue(item))
+      .filter((item) => item !== "-")
+    return values.length > 0 ? values.join(", ") : "-"
+  }
+
+  return String(value)
 }
 
 function formatDateValue(value?: string | null) {
@@ -564,6 +601,11 @@ export default function UserDetailsPage() {
   const materialDetails = eligibilityData?.worksAndMaterials.materials
   const planDetails = eligibilityData?.worksAndMaterials.plansDrawingsPhotographs
   const siteConstraints = eligibilityData?.siteConstraints
+  const accessAndParking = siteConstraints?.accessAndParking
+  const floodAndEnvironmentalRisk = siteConstraints?.floodAndEnvironmentalRisk
+  const heritageAndListing = siteConstraints?.heritageAndListing
+  const preApplicationAdvice = siteConstraints?.preApplicationAdvice
+  const treesHedgesLandscaping = siteConstraints?.treesHedgesLandscaping
   const utilitiesAndConsents = eligibilityData?.utilitiesAndConsents
   const declarationDetails = eligibilityData?.declarations
   const customer = {
@@ -581,7 +623,7 @@ export default function UserDetailsPage() {
     postcode: formatDisplayValue(applicantDetails?.postcode),
     propertyType: formatDisplayValue(propertyDetails?.propertyType),
     ownershipStatus: formatDisplayValue(propertyDetails?.ownershipStatus),
-    conservationArea: formatDisplayValue(siteConstraints?.heritageAndListing.isInConservationArea),
+    conservationArea: formatDisplayValue(heritageAndListing?.isInConservationArea),
     purposeOfDevelopment: formatDisplayValue(propertyDetails?.purposeOfDevelopment),
     existingWidth: formatDisplayValue(worksDetails?.existingPropertyWidthM),
     existingDepth: formatDisplayValue(worksDetails?.distanceFromBoundaryM),
@@ -589,11 +631,11 @@ export default function UserDetailsPage() {
     proposedExtensionHeight: formatDisplayValue(worksDetails?.proposedExtensionHeightM),
     externalMaterials: formatDisplayValue(materialDetails?.wallMaterials),
     briefDescription: formatDisplayValue(worksDetails?.propsedWorksDescription),
-    listedBuilding: formatDisplayValue(siteConstraints?.heritageAndListing.isListedBuilding),
-    tpo: formatDisplayValue(siteConstraints?.treesHedgesLandscaping.treesWithTPO),
-    floodZone: formatDisplayValue(siteConstraints?.floodAndEnvironmentalRisk.isSiteInFloodRiskArea),
-    vehicleAccess: formatDisplayValue(siteConstraints?.accessAndParking.newOrAlteredAccess),
-    preApplicationAdvice: formatDisplayValue(siteConstraints?.preApplicationAdvice.soughtPreAppAdvice),
+    listedBuilding: formatDisplayValue(heritageAndListing?.isListedBuilding),
+    tpo: formatDisplayValue(treesHedgesLandscaping?.treesWithTPO),
+    floodZone: formatDisplayValue(floodAndEnvironmentalRisk?.isSiteInFloodRiskArea),
+    vehicleAccess: formatDisplayValue(accessAndParking?.newOrAlteredAccess),
+    preApplicationAdvice: formatDisplayValue(preApplicationAdvice?.soughtPreAppAdvice),
     additionalConsents: formatDisplayValue(utilitiesAndConsents?.additionalConsents),
     consultationBooked: false,
     consultationDate: "-",
@@ -887,22 +929,22 @@ export default function UserDetailsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <OverviewCard title="Site Constraints" icon={<AlertTriangle size={14} className="text-amber-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Listed Building" value={siteConstraints?.heritageAndListing.isListedBuilding} />
-                        <InfoPair label="Conservation Area" value={siteConstraints?.heritageAndListing.isInConservationArea} />
-                        <InfoPair label="Flood Risk Area" value={siteConstraints?.floodAndEnvironmentalRisk.isSiteInFloodRiskArea} />
-                        <InfoPair label="Contaminated Land" value={siteConstraints?.floodAndEnvironmentalRisk.isSiteContaminatedLand} />
-                        <InfoPair label="New / Altered Access" value={siteConstraints?.accessAndParking.newOrAlteredAccess} />
-                        <InfoPair label="Access / Parking Changes" value={siteConstraints?.accessAndParking.accessOrParkingChanges} />
-                        <InfoPair label="Cycle Storage" value={siteConstraints?.accessAndParking.cycleStorageProvisions} />
+                        <InfoPair label="Listed Building" value={heritageAndListing?.isListedBuilding} />
+                        <InfoPair label="Conservation Area" value={heritageAndListing?.isInConservationArea} />
+                        <InfoPair label="Flood Risk Area" value={floodAndEnvironmentalRisk?.isSiteInFloodRiskArea} />
+                        <InfoPair label="Contaminated Land" value={floodAndEnvironmentalRisk?.isSiteContaminatedLand} />
+                        <InfoPair label="New / Altered Access" value={accessAndParking?.newOrAlteredAccess} />
+                        <InfoPair label="Access / Parking Changes" value={accessAndParking?.accessOrParkingChanges} />
+                        <InfoPair label="Cycle Storage" value={accessAndParking?.cycleStorageProvisions} />
                       </div>
                     </OverviewCard>
                     <OverviewCard title="Trees + Consents" icon={<TreePine size={14} className="text-emerald-600" />}>
                       <div className="space-y-2">
-                        <InfoPair label="Pre-App Advice Sought" value={siteConstraints?.preApplicationAdvice.soughtPreAppAdvice} />
-                        <InfoPair label="Pre-App Ref" value={siteConstraints?.preApplicationAdvice.preApplicationReferenceNumber} />
-                        <InfoPair label="Trees with TPO" value={siteConstraints?.treesHedgesLandscaping.treesWithTPO} />
-                        <InfoPair label="Tree Species" value={siteConstraints?.treesHedgesLandscaping.treeSpecies} />
-                        <InfoPair label="Trees Within Falling Distance" value={siteConstraints?.treesHedgesLandscaping.treesWithinFallingDistance} />
+                        <InfoPair label="Pre-App Advice Sought" value={preApplicationAdvice?.soughtPreAppAdvice} />
+                        <InfoPair label="Pre-App Ref" value={preApplicationAdvice?.preApplicationReferenceNumber} />
+                        <InfoPair label="Trees with TPO" value={treesHedgesLandscaping?.treesWithTPO} />
+                        <InfoPair label="Tree Species" value={treesHedgesLandscaping?.treeSpecies} />
+                        <InfoPair label="Trees Within Falling Distance" value={treesHedgesLandscaping?.treesWithinFallingDistance} />
                         <InfoPair label="Additional Consents" value={utilitiesAndConsents?.additionalConsents} />
                       </div>
                     </OverviewCard>
@@ -1160,32 +1202,32 @@ export default function UserDetailsPage() {
                             icon={<Shield size={14} className="text-amber-600" />}
                           >
                             <div className="space-y-2 text-sm text-slate-700">
-                              <InfoPair label="Listed Building" value={eligibilityData.siteConstraints.heritageAndListing.isListedBuilding} />
-                              <InfoPair label="Conservation Area" value={eligibilityData.siteConstraints.heritageAndListing.isInConservationArea} />
-                              <InfoPair label="Flood Risk Area" value={eligibilityData.siteConstraints.floodAndEnvironmentalRisk.isSiteInFloodRiskArea} />
-                              <InfoPair label="Contaminated Land" value={eligibilityData.siteConstraints.floodAndEnvironmentalRisk.isSiteContaminatedLand} />
-                              <InfoPair label="New or Altered Access" value={eligibilityData.siteConstraints.accessAndParking.newOrAlteredAccess} />
-                              <InfoPair label="Parking Changes" value={eligibilityData.siteConstraints.accessAndParking.accessOrParkingChanges} />
-                              <InfoPair label="Cycle Storage" value={eligibilityData.siteConstraints.accessAndParking.cycleStorageProvisions} />
-                              <InfoPair label="Pre-App Advice Sought" value={eligibilityData.siteConstraints.preApplicationAdvice.soughtPreAppAdvice} />
-                              <InfoPair label="Officer Name" value={eligibilityData.siteConstraints.preApplicationAdvice.officerName} />
+                              <InfoPair label="Listed Building" value={heritageAndListing?.isListedBuilding} />
+                              <InfoPair label="Conservation Area" value={heritageAndListing?.isInConservationArea} />
+                              <InfoPair label="Flood Risk Area" value={floodAndEnvironmentalRisk?.isSiteInFloodRiskArea} />
+                              <InfoPair label="Contaminated Land" value={floodAndEnvironmentalRisk?.isSiteContaminatedLand} />
+                              <InfoPair label="New or Altered Access" value={accessAndParking?.newOrAlteredAccess} />
+                              <InfoPair label="Parking Changes" value={accessAndParking?.accessOrParkingChanges} />
+                              <InfoPair label="Cycle Storage" value={accessAndParking?.cycleStorageProvisions} />
+                              <InfoPair label="Pre-App Advice Sought" value={preApplicationAdvice?.soughtPreAppAdvice} />
+                              <InfoPair label="Officer Name" value={preApplicationAdvice?.officerName} />
                               <InfoPair
                                 label="Pre-App Reference"
-                                value={eligibilityData.siteConstraints.preApplicationAdvice.preApplicationReferenceNumber}
+                                value={preApplicationAdvice?.preApplicationReferenceNumber}
                               />
                               <InfoPair
                                 label="Pre-App Summary"
-                                value={eligibilityData.siteConstraints.preApplicationAdvice.preApplicationAdviceSummary}
+                                value={preApplicationAdvice?.preApplicationAdviceSummary}
                               />
-                              <InfoPair label="Trees with TPO" value={eligibilityData.siteConstraints.treesHedgesLandscaping.treesWithTPO} />
-                              <InfoPair label="Tree Species" value={eligibilityData.siteConstraints.treesHedgesLandscaping.treeSpecies} />
+                              <InfoPair label="Trees with TPO" value={treesHedgesLandscaping?.treesWithTPO} />
+                              <InfoPair label="Tree Species" value={treesHedgesLandscaping?.treeSpecies} />
                               <InfoPair
                                 label="Trees Within Falling Distance"
-                                value={eligibilityData.siteConstraints.treesHedgesLandscaping.treesWithinFallingDistance}
+                                value={treesHedgesLandscaping?.treesWithinFallingDistance}
                               />
-                              {eligibilityData.siteConstraints.floodAndEnvironmentalRisk.floodRiskAssesmentReport ? (
+                              {floodAndEnvironmentalRisk?.floodRiskAssesmentReport ? (
                                 <a
-                                  href={eligibilityData.siteConstraints.floodAndEnvironmentalRisk.floodRiskAssesmentReport}
+                                  href={floodAndEnvironmentalRisk.floodRiskAssesmentReport}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
@@ -1194,9 +1236,9 @@ export default function UserDetailsPage() {
                                   Open flood risk assessment
                                 </a>
                               ) : null}
-                              {eligibilityData.siteConstraints.treesHedgesLandscaping.treeSurveyReport ? (
+                              {treesHedgesLandscaping?.treeSurveyReport ? (
                                 <a
-                                  href={eligibilityData.siteConstraints.treesHedgesLandscaping.treeSurveyReport}
+                                  href={treesHedgesLandscaping.treeSurveyReport}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
@@ -2162,7 +2204,7 @@ function InfoPair({
   value,
 }: {
   label: string
-  value?: string | number | boolean | null
+  value?: unknown
 }) {
   return (
     <div className="flex items-start justify-between gap-3 rounded-lg bg-white px-3 py-2">
