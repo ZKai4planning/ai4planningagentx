@@ -48,6 +48,7 @@ type ApiProject = {
   subServiceId: string
   projectStageId: string
   projectStatus?: string
+  paymentStatus?: string
   isDeleted?: boolean
   councilName?: string
   council?: {
@@ -95,6 +96,8 @@ type ProjectRow = {
   status: string
   createdOn: string
   updatedOn: string
+  subscriptionDetails: string
+  paymentStatus: "paid" | "pending"
 }
 
 const DEFAULT_PAGINATION: ApiPagination = {
@@ -140,6 +143,77 @@ function getDisplayValue(...values: Array<string | null | undefined>) {
   return "-"
 }
 
+function getNestedValue(source: unknown, path: readonly string[]) {
+  let current: unknown = source
+
+  for (const key of path) {
+    if (!current || typeof current !== "object") {
+      return undefined
+    }
+
+    current = (current as Record<string, unknown>)[key]
+  }
+
+  return current
+}
+
+function getSubscriptionDetails(project: ApiProject) {
+  const candidatePaths = [
+    ["subscriptionDetails"],
+    ["subscriptionPlan"],
+    ["planName"],
+    ["subscription", "details"],
+    ["subscription", "plan"],
+    ["subscription", "name"],
+    ["user", "subscriptionDetails"],
+    ["user", "subscriptionPlan"],
+    ["user", "planName"],
+    ["user", "subscription", "plan"],
+    ["user", "subscription", "name"],
+    ["customer", "subscriptionDetails"],
+    ["customer", "subscription", "plan"],
+    ["project", "subscriptionDetails"],
+    ["project", "subscription", "plan"],
+  ] as const
+
+  for (const path of candidatePaths) {
+    const value = getNestedValue(project, path)
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return "Bronze Plan"
+}
+
+function getPaymentStatus(project: ApiProject): "paid" | "pending" {
+  const candidatePaths = [
+    ["paymentStatus"],
+    ["payment", "status"],
+    ["subscription", "paymentStatus"],
+    ["user", "paymentStatus"],
+    ["customer", "paymentStatus"],
+    ["project", "paymentStatus"],
+  ] as const
+
+  for (const path of candidatePaths) {
+    const value = getNestedValue(project, path)
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (["paid", "completed", "success"].includes(normalized)) {
+        return "paid"
+      }
+      if (["pending", "unpaid", "requested", "due"].includes(normalized)) {
+        return "pending"
+      }
+    }
+  }
+
+  return ["active", "in_progress", "completed"].includes(project.projectStatus ?? "")
+    ? "paid"
+    : "pending"
+}
+
 function mapProjectToRow(project: ApiProject): ProjectRow {
   const service = getDisplayValue(
     project.service?.serviceName,
@@ -164,6 +238,8 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
     status: project.projectStatus || "unknown",
     createdOn: formatDate(project.createdAt),
     updatedOn: formatDate(project.updatedAt),
+    subscriptionDetails: getSubscriptionDetails(project),
+    paymentStatus: getPaymentStatus(project),
   }
 }
 
@@ -358,6 +434,18 @@ export default function ProjectsPage() {
       width: "140px",
     },
     {
+      key: "subscriptionDetails",
+      label: "Subscription",
+      sortable: true,
+      width: "180px",
+      render: (_, row) => (
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-slate-800">{row.subscriptionDetails}</p>
+          <PaymentStatusLabel status={row.paymentStatus} />
+        </div>
+      ),
+    },
+    {
       key: "actions",
       label: "Action",
       align: "right",
@@ -468,6 +556,14 @@ export default function ProjectsPage() {
                   <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <InfoField label="Service" value={project.service} />
                     <InfoField label="Sub Service" value={project.subService} />
+                    <InfoField
+                      label="Subscription"
+                      value={project.subscriptionDetails}
+                      helperText={
+                        project.paymentStatus === "paid" ? "Paid" : "Pending payment"
+                      }
+                      helperTone={project.paymentStatus}
+                    />
                     <InfoField label="Council Name" value={project.councilName} />
                     <InfoField label="Agent X Name" value={project.agentXName} />
                     <InfoField label="Agent Y Name" value={project.agentYName} />
@@ -602,11 +698,43 @@ function InsightCard({
   )
 }
 
-function InfoField({ label, value }: { label: string; value: string }) {
+function PaymentStatusLabel({ status }: { status: "paid" | "pending" }) {
+  const tones = {
+    paid: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  }
+
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${tones[status]}`}>
+      {status === "paid" ? "Paid" : "Pending payment"}
+    </span>
+  )
+}
+
+function InfoField({
+  label,
+  value,
+  helperText,
+  helperTone,
+}: {
+  label: string
+  value: string
+  helperText?: string
+  helperTone?: "paid" | "pending"
+}) {
   return (
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-1 text-sm text-slate-800">{value}</p>
+      {helperText ? (
+        <p
+          className={`mt-1 text-xs font-medium ${
+            helperTone === "paid" ? "text-emerald-700" : "text-amber-700"
+          }`}
+        >
+          {helperText}
+        </p>
+      ) : null}
     </div>
   )
 }

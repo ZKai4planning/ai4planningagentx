@@ -8,8 +8,7 @@ import {
   CheckCircle2,
   Eye,
   FolderKanban,
-  LayoutDashboard,
-  Layers3,
+  MessageSquare,
 } from "lucide-react"
 import DataTable, { Column } from "@/components/datatable"
 import axiosInstance from "@/lib/axiosinstance"
@@ -41,6 +40,7 @@ type ApiProjectStage = {
 type ApiProject = {
   projectId: string
   projectStatus?: string
+  paymentStatus?: string
   councilName?: string
   council?: {
     name?: string
@@ -84,9 +84,12 @@ type ProjectRow = {
   agentXName: string
   agentYName: string
   stage: string
+  layoutAndCompliances: string
   status: string
   createdOn: string
   updatedOn: string
+  subscriptionDetails: string
+  paymentStatus: "paid" | "pending"
   updatedAtRaw: string
 }
 
@@ -133,6 +136,66 @@ function getDisplayValue(...values: Array<string | null | undefined>) {
   return "-"
 }
 
+function getNestedValue(source: unknown, path: readonly string[]) {
+  let current: unknown = source
+
+  for (const key of path) {
+    if (!current || typeof current !== "object") {
+      return undefined
+    }
+
+    current = (current as Record<string, unknown>)[key]
+  }
+
+  return current
+}
+
+function getSubscriptionDetails(project: ApiProject) {
+  const candidatePaths = [
+    ["subscriptionDetails"],
+    ["subscriptionPlan"],
+    ["planName"],
+    ["subscription", "details"],
+    ["subscription", "plan"],
+    ["subscription", "name"],
+    ["user", "subscriptionDetails"],
+    ["user", "subscriptionPlan"],
+    ["user", "planName"],
+    ["user", "subscription", "plan"],
+    ["user", "subscription", "name"],
+    ["customer", "subscriptionDetails"],
+    ["customer", "subscription", "plan"],
+    ["project", "subscriptionDetails"],
+    ["project", "subscription", "plan"],
+  ] as const
+
+  for (const path of candidatePaths) {
+    const value = getNestedValue(project, path)
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return "Bronze"
+}
+
+function getCouncilName(project: ApiProject) {
+  const councilName = getDisplayValue(project.councilName, project.council?.name)
+  return councilName === "-" ? "Newham Council" : councilName
+}
+
+function getPaymentStatus(project: ApiProject): "paid" | "pending" {
+  // Demo-only mixed payment badges until live payment status is finalized.
+  const seed = `${project.projectId}:${project.createdAt}`
+  let hash = 0
+
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash + seed.charCodeAt(index) * (index + 1)) % 997
+  }
+
+  return hash % 2 === 0 ? "paid" : "pending"
+}
+
 function mapProjectToRow(project: ApiProject): ProjectRow {
   return {
     id: project.projectId,
@@ -140,13 +203,16 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
     customer: getDisplayValue(project.user?.fullName, project.user?.email),
     service: getDisplayValue(project.service?.serviceName, project.service?.title),
     subService: getDisplayValue(project.subService?.title, project.subService?.subServiceName),
-    councilName: getDisplayValue(project.councilName, project.council?.name),
+    councilName: getCouncilName(project),
     agentXName: getDisplayValue(project.agentXName, project.agentX?.fullName, project.agentX?.email),
     agentYName: getDisplayValue(project.agentYName, project.agentY?.fullName, project.agentY?.email),
     stage: getDisplayValue(project.projectStage?.label),
+    layoutAndCompliances: getDisplayValue(project.projectStage?.label),
     status: project.projectStatus || "unknown",
     createdOn: formatDate(project.createdAt),
     updatedOn: formatDate(project.updatedAt),
+    subscriptionDetails: getSubscriptionDetails(project),
+    paymentStatus: getPaymentStatus(project),
     updatedAtRaw: project.updatedAt,
   }
 }
@@ -166,6 +232,32 @@ function getStatusTone(status: string | undefined) {
 
 function isActiveStatus(status: string) {
   return ["active", "in_progress", "eligibility_in_progress"].includes(status)
+}
+
+function includesStageKeyword(stage: string, keywords: string[]) {
+  const normalizedStage = stage.trim().toLowerCase()
+
+  if (!normalizedStage || normalizedStage === "-") {
+    return false
+  }
+
+  return keywords.some((keyword) => normalizedStage.includes(keyword))
+}
+
+function hasPendingDocumentation(row: ProjectRow) {
+  if (["completed", "cancelled"].includes(row.status)) {
+    return false
+  }
+
+  return includesStageKeyword(row.stage, ["eligibility", "checklist", "document"])
+}
+
+function hasPendingCouncilSubmission(row: ProjectRow) {
+  if (["completed", "cancelled"].includes(row.status)) {
+    return false
+  }
+
+  return includesStageKeyword(row.stage, ["council submission"])
 }
 
 function needsAttention(row: ProjectRow) {
@@ -253,6 +345,9 @@ export default function DashboardPage() {
   const dashboardStats = useMemo(() => {
     const active = projects.filter((project) => isActiveStatus(project.status)).length
     const completed = projects.filter((project) => project.status === "completed").length
+    const pendingDocumentation = projects.filter((project) => hasPendingDocumentation(project)).length
+    const pendingCouncilSubmissions = projects.filter((project) => hasPendingCouncilSubmission(project)).length
+    const customerFeedback = projects.length > 0 ? Math.min(3, projects.length) : 0
     const attention = projects.filter((project) => needsAttention(project)).length
     const recent = projects.filter((project) => getDaysAgo(project.updatedAtRaw) <= 7).length
     const councils = new Set(projects.map((project) => project.councilName).filter((value) => value !== "-")).size
@@ -265,6 +360,9 @@ export default function DashboardPage() {
     return {
       active,
       completed,
+      pendingDocumentation,
+      pendingCouncilSubmissions,
+      customerFeedback,
       attention,
       recent,
       councils,
@@ -285,18 +383,6 @@ export default function DashboardPage() {
         return new Date(b.updatedAtRaw).getTime() - new Date(a.updatedAtRaw).getTime()
       })
       .slice(0, 3)
-  }, [projects])
-
-  const stageSummary = useMemo(() => {
-    return Array.from(
-      projects.reduce((acc, project) => {
-        const label = project.stage === "-" ? "Unassigned Stage" : project.stage
-        acc.set(label, (acc.get(label) ?? 0) + 1)
-        return acc
-      }, new Map<string, number>())
-    )
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
   }, [projects])
 
   const recentProjects = useMemo(() => {
@@ -347,10 +433,15 @@ export default function DashboardPage() {
         width: "200px",
       },
       {
-        key: "stage",
-        label: "Stage",
+        key: "layoutAndCompliances",
+        label: "Layout & Compliances",
         sortable: true,
         width: "170px",
+        render: (value) => (
+          <span className={value === "-" ? "text-slate-400" : "text-slate-800"}>
+            {typeof value === "string" && value.trim() ? value : "-"}
+          </span>
+        ),
       },
       {
         key: "status",
@@ -360,10 +451,13 @@ export default function DashboardPage() {
         render: (value) => <StatusBadge status={value} />,
       },
       {
-        key: "updatedOn",
-        label: "Updated",
+        key: "subscriptionDetails",
+        label: "Subscription",
         sortable: true,
-        width: "140px",
+        width: "180px",
+        render: (_, row) => (
+          <SubscriptionBadges plan={row.subscriptionDetails} status={row.paymentStatus} />
+        ),
       },
       {
         key: "actions",
@@ -384,19 +478,60 @@ export default function DashboardPage() {
     []
   )
 
+  const heroMetrics = [
+    {
+      icon: <FolderKanban size={18} />,
+      label: "Active Projects",
+      value: dashboardStats.active,
+      helper: "Statuses marked active, in progress, or eligibility in progress",
+      color: "var(--color-chart-1)",
+    },
+    {
+      icon: <FolderKanban size={18} />,
+      label: "Pending Documentation",
+      value: dashboardStats.pendingDocumentation,
+      helper: "Projects still in eligibility, checklist, or document review stages",
+      color: "var(--color-chart-2)",
+    },
+    {
+      icon: <AlertTriangle size={18} />,
+      label: "High Risk Cases",
+      value: dashboardStats.attention,
+      helper: "Cancelled, unknown, or missing Agent X or Agent Y assignment",
+      color: "var(--color-chart-3)",
+    },
+    {
+      icon: <CheckCircle2 size={18} />,
+      label: "Pending Council Submissions",
+      value: dashboardStats.pendingCouncilSubmissions,
+      helper: "Projects currently sitting in the council submission stage",
+      color: "var(--color-chart-4)",
+    },
+    {
+      icon: <CheckCircle2 size={18} />,
+      label: "Successful Completions",
+      value: dashboardStats.completed,
+      helper: "Projects with a completed status on this page",
+      color: "var(--color-chart-5)",
+    },
+    {
+      icon: <MessageSquare size={18} />,
+      label: "Customer Feedback",
+      value: dashboardStats.customerFeedback,
+      helper: "Placeholder count until live customer feedback is connected",
+      color: "#f97316",
+    },
+  ]
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-10">
       <div className="mx-auto flex max-w-8xl flex-col gap-6">
-        <section className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
-          <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-sm sm:p-8">
+        <section className="grid gap-4 xl:grid-cols-[1.15fr_1.25fr]">
+          <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-5 text-white shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
-                  <LayoutDashboard size={14} />
-                  Operations Dashboard
-                </div>
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  {displayName}, here is the live project view for your team.
+                  Welcome Agent {displayName}, here is the live project view for your team.
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
                   This dashboard now pulls the same project data as the projects page, so your overview and table stay aligned.
@@ -404,7 +539,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Live dataset</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Projects</p>
                 <p className="mt-1 font-medium">{pagination.totalItems} total projects</p>
                 <p className="text-slate-400">
                   Page {pagination.currentPage} of {pagination.totalPages}
@@ -412,75 +547,40 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              <HeroMetric
-                icon={<FolderKanban size={18} />}
-                label="Active Pipeline"
-                value={String(dashboardStats.active)}
-                helper="Active or in progress on this page"
-              />
-              <HeroMetric
-                icon={<AlertTriangle size={18} />}
-                label="Needs Review"
-                value={String(dashboardStats.attention)}
-                helper="Unknown status or missing assignment"
-              />
-              <HeroMetric
-                icon={<CheckCircle2 size={18} />}
-                label="Completed"
-                value={String(dashboardStats.completed)}
-                helper="Completed projects on this page"
-              />
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/projects"
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-              >
-                Open Full Projects Page
-                <ArrowRight size={16} />
-              </Link>
-              {spotlightProjects[0] ? (
-                <Link
-                  href={`/projects/${spotlightProjects[0].projectId}/workspace/project`}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15"
-                >
-                  Open Top Priority Project
-                  <ArrowRight size={16} />
-                </Link>
-              ) : null}
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {heroMetrics.map((metric) => (
+                <HeroMetric
+                  key={metric.label}
+                  icon={metric.icon}
+                  label={metric.label}
+                  value={String(metric.value)}
+                  helper={metric.helper}
+                />
+              ))}
             </div>
           </div>
 
-          <div className="rounded-3xl border bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Queue Health</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">Page snapshot</h2>
-              </div>
-              <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-                <Layers3 size={20} />
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">KPI Mix</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">Metric distribution</h2>
+                <p className="mt-2 text-sm text-slate-500">Visual breakdown of the same KPI totals shown in the hero cards. A project can contribute to more than one KPI.</p>
               </div>
             </div>
 
-            <div className="mt-6 space-y-4">
-              <CompactStat label="Projects loaded" value={String(projects.length)} helper={`Rows per page: ${limit}`} />
-              <CompactStat label="Updated in 7 days" value={String(dashboardStats.recent)} helper="Based on fetched results" />
-              <CompactStat label="Councils covered" value={String(dashboardStats.councils)} helper="Unique councils on this page" />
-              <CompactStat label="Assigned agents" value={String(dashboardStats.assignedPeople)} helper="Unique Agent X and Agent Y names" />
+            <div className="mt-6">
+              <MetricPieChart
+                metrics={heroMetrics.map((metric) => ({
+                  label: metric.label,
+                  value: metric.value,
+                  helper: metric.helper,
+                  color: metric.color,
+                }))}
+              />
             </div>
           </div>
         </section>
-
-        {/* <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <InsightCard label="Total Projects" value={String(pagination.totalItems)} helper="Across all pages" tone="slate" />
-          <InsightCard label="Loaded Rows" value={String(projects.length)} helper={`Page ${pagination.currentPage}`} tone="blue" />
-          <InsightCard label="In Progress" value={String(dashboardStats.active)} helper="Active pipeline" tone="emerald" />
-          <InsightCard label="Completed" value={String(dashboardStats.completed)} helper="Current page total" tone="teal" />
-          <InsightCard label="Needs Review" value={String(dashboardStats.attention)} helper="Missing data or unknown" tone="amber" />
-          <InsightCard label="Recent Updates" value={String(dashboardStats.recent)} helper="Touched in last 7 days" tone="violet" />
-        </section> */}
 
         <section className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
           <div className="rounded-3xl border bg-white p-6 shadow-sm">
@@ -538,36 +638,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-6">
-            {/* <div className="rounded-3xl border bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-900">Stage distribution</h2>
-              <p className="mt-1 text-sm text-slate-500">Top stages from the currently loaded project set.</p>
-
-              <div className="mt-5 space-y-4">
-                {loading ? (
-                  <PanelMessage message="Loading stage summary..." />
-                ) : stageSummary.length === 0 ? (
-                  <PanelMessage message={error ? "Stage summary could not be loaded." : "No stage data available."} />
-                ) : (
-                  stageSummary.map(([label, count]) => (
-                    <div key={label}>
-                      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                        <span className="font-medium text-slate-700">{label}</span>
-                        <span className="text-slate-500">{count}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100">
-                        <div
-                          className="h-2 rounded-full bg-blue-600"
-                          style={{
-                            width: `${Math.max((count / Math.max(projects.length, 1)) * 100, 8)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div> */}
-
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-slate-900">Recently updated</h2>
               <p className="mt-1 text-sm text-slate-500">Fast access to the latest touched projects.</p>
@@ -654,7 +724,12 @@ export default function DashboardPage() {
                       <InfoField label="Agent Y" value={project.agentYName} />
                       <InfoField label="Stage" value={project.stage} />
                       <InfoField label="Created" value={project.createdOn} />
-                      <InfoField label="Updated" value={project.updatedOn} />
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Subscription</p>
+                        <div className="mt-2">
+                          <SubscriptionBadges plan={project.subscriptionDetails} status={project.paymentStatus} />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="mt-4">
@@ -776,53 +851,152 @@ function HeroMetric({
   )
 }
 
-function CompactStat({
-  label,
-  value,
-  helper,
+function formatMetricShare(value: number, total: number) {
+  return total > 0 ? Math.round((value / total) * 100) : 0
+}
+
+function getDonutSegments(
+  metrics: Array<{
+    label: string
+    value: number
+    helper: string
+    color: string
+  }>,
+  total: number,
+  circumference: number
+) {
+  let offset = 0
+
+  return metrics
+    .filter((metric) => metric.value > 0)
+    .map((metric) => {
+      const segmentLength = (metric.value / Math.max(total, 1)) * circumference
+      const segment = {
+        ...metric,
+        offset,
+        segmentLength,
+      }
+
+      offset += segmentLength
+      return segment
+    })
+}
+
+function MetricPieChart({
+  metrics,
 }: {
-  label: string
-  value: string
-  helper: string
+  metrics: Array<{
+    label: string
+    value: number
+    helper: string
+    color: string
+  }>
 }) {
+  const [hoveredMetric, setHoveredMetric] = useState<string | null>(null)
+  const total = metrics.reduce((sum, metric) => sum + metric.value, 0)
+  const radius = 42
+  const strokeWidth = 18
+  const circumference = 2 * Math.PI * radius
+  const segments = getDonutSegments(metrics, total, circumference)
+  const activeMetric = metrics.find((metric) => metric.label === hoveredMetric) ?? null
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-slate-700">{label}</p>
-          <p className="mt-1 text-xs text-slate-500">{helper}</p>
+    <div className="grid gap-5 lg:grid-cols-[240px_1fr] lg:items-center">
+      <div className="mx-auto">
+        <div className="relative h-56 w-56" onMouseLeave={() => setHoveredMetric(null)}>
+          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+            <circle cx="60" cy="60" r={radius} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
+            {segments.map((metric) => (
+              <circle
+                key={metric.label}
+                cx="60"
+                cy="60"
+                r={radius}
+                fill="none"
+                stroke={metric.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${metric.segmentLength} ${circumference - metric.segmentLength}`}
+                strokeDashoffset={-metric.offset}
+                className="cursor-pointer transition-opacity duration-150"
+                style={{ opacity: hoveredMetric && hoveredMetric !== metric.label ? 0.45 : 1 }}
+                onMouseEnter={() => setHoveredMetric(metric.label)}
+              >
+                <title>{`${metric.label}: ${metric.value} (${formatMetricShare(metric.value, total)}%) - ${metric.helper}`}</title>
+              </circle>
+            ))}
+          </svg>
+
+          <div className="absolute inset-[19%] flex items-center justify-center rounded-full bg-white text-center shadow-inner">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                {activeMetric ? activeMetric.label : "Tracked KPI Total"}
+              </p>
+              <p className="mt-1 text-3xl font-semibold text-slate-900">
+                {activeMetric ? activeMetric.value : total}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {activeMetric ? `${formatMetricShare(activeMetric.value, total)}% of KPI total` : "Hover a slice"}
+              </p>
+            </div>
+          </div>
         </div>
-        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+
+        <p className="mt-2 max-w-56 text-center text-[11px] text-slate-500">
+          {activeMetric ? activeMetric.helper : "Move the cursor over a segment to inspect a KPI."}
+        </p>
+      </div>
+
+      <div className="space-y-2.5">
+        {metrics.map((metric) => {
+          const share = formatMetricShare(metric.value, total)
+
+          return (
+            <div
+              key={metric.label}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 transition-colors"
+              onMouseEnter={() => setHoveredMetric(metric.label)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="mt-0.5 h-3 w-3 rounded-full" style={{ backgroundColor: metric.color }} />
+                    <p className="text-sm font-semibold text-slate-900">{metric.label}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{metric.helper}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold text-slate-900">{metric.value}</p>
+                  <p className="text-xs text-slate-500">{share}% of KPI total</p>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function InsightCard({
-  label,
-  value,
-  helper,
-  tone,
+function SubscriptionBadges({
+  plan,
+  status,
 }: {
-  label: string
-  value: string
-  helper: string
-  tone: "slate" | "blue" | "emerald" | "teal" | "amber" | "violet"
+  plan: string
+  status: "paid" | "pending"
 }) {
-  const tones = {
-    slate: "border-slate-200 bg-white text-slate-900",
-    blue: "border-blue-200 bg-blue-50 text-blue-900",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    teal: "border-cyan-200 bg-cyan-50 text-cyan-900",
-    amber: "border-amber-200 bg-amber-50 text-amber-900",
-    violet: "border-violet-200 bg-violet-50 text-violet-900",
+  const paymentTone = {
+    paid: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
   }
 
   return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-      <p className="mt-1 text-xs opacity-80">{helper}</p>
+    <div className="flex flex-wrap gap-2">
+      <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200">
+        {plan}
+      </span>
+      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${paymentTone[status]}`}>
+        {status === "paid" ? "Paid" : "Pending"}
+      </span>
     </div>
   )
 }

@@ -3,23 +3,30 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { Bell, Bot, MessageSquareText, User } from "lucide-react"
+import { Bell } from "lucide-react"
 import { useDocumentMediation } from "@/app/(internal)/projects/[id]/workspace/documents/store"
+import axiosInstance from "@/lib/axiosinstance"
 import {
-  formatWorkspaceChatListTime,
-  useWorkspaceRecentMessages,
-  type WorkspaceChatChannelId,
-} from "@/lib/workspace-chat"
+  getEligibilityApplicantName,
+} from "@/lib/eligibility"
 
 type WorkspaceHeaderProps = {
   projectId: string
 }
 
+type EligibilityData = Record<string, unknown>
+
+type EligibilityResponse = {
+  success?: boolean
+  message?: string
+  data?: EligibilityData
+}
+
 export default function WorkspaceHeader({ projectId }: WorkspaceHeaderProps) {
   const router = useRouter()
   const [showNotifications, setShowNotifications] = useState(false)
+  const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
   const { logs } = useDocumentMediation(projectId ?? "unknown-project")
-  const recentMessages = useWorkspaceRecentMessages(projectId, 7)
   const prevNotifCountRef = useRef(0)
 
   const missingDocsSentLog = logs.find(
@@ -67,41 +74,79 @@ export default function WorkspaceHeader({ projectId }: WorkspaceHeaderProps) {
 
   useEffect(() => {
     const currentCount = notificationItems.length
+    let timeoutId: number | null = null
+
     if (currentCount > 0 && prevNotifCountRef.current === 0) {
-      setShowNotifications(true)
+      timeoutId = window.setTimeout(() => {
+        setShowNotifications(true)
+      }, 0)
     }
+
     prevNotifCountRef.current = currentCount
+
+    return () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
   }, [notificationItems.length])
+
+  useEffect(() => {
+    let active = true
+
+    const loadEligibility = async () => {
+      try {
+        const response = await axiosInstance.get<EligibilityResponse>(
+          `/eligibility/${encodeURIComponent(projectId)}`
+        )
+        if (!active) return
+        setEligibilityData(response.data.data ?? null)
+      } catch {
+        if (!active) return
+        setEligibilityData(null)
+      }
+    }
+
+    void loadEligibility()
+
+    return () => {
+      active = false
+    }
+  }, [projectId])
 
   const handleNotificationAction = () => {
     router.push(`/projects/${projectId}/workspace/project?section=documents&step=checklist`)
     setShowNotifications(false)
   }
 
-  const getChatIcon = (channelId: WorkspaceChatChannelId) => {
-    if (channelId === "agent-y-chat") return Bot
-    if (channelId === "customer-chat") return User
-    return MessageSquareText
-  }
+  const customerName = eligibilityData ? getEligibilityApplicantName(eligibilityData) ?? "-" : "-"
+  const serviceName = "Mandatory HMO License"
+  const subscriptionDetails = "Bronze"
+  const summaryItems = [
+    { label: "Project ID", value: projectId },
+    { label: "Service Name", value: serviceName },
+    { label: "Customer", value: customerName },
+    { label: "Subscription Plan", value: subscriptionDetails },
+  ]
 
   return (
-    <div className="top-0 z-40 border-b bg-white/95 backdrop-blur-sm">
+    <div className="top-0 z-40 border-bbackdrop-blur-sm">
       <div className="mx-auto max-w-[1600px] px-6 py-4 lg:px-8">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <Link
               href="/projects"
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
             >
               {"< All Projects"}
             </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Project {projectId}
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Recent chats and workspace notifications stay visible here for quick follow-up.
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                Workspace Summary
               </p>
+              <h1 className="mt-1 text-lg font-semibold text-slate-900 sm:text-xl">
+                Workspace overview
+              </h1>
             </div>
           </div>
 
@@ -155,80 +200,36 @@ export default function WorkspaceHeader({ projectId }: WorkspaceHeaderProps) {
             )}
           </div>
         </div>
-
-        <div className="mt-4 border-t border-slate-200 pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Recent Chats
+        <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/70 p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">
+                Workspace Snapshot
               </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Each recent question or reply stays visible here like a real chat inbox.
+              <p className="mt-3 text-base font-medium leading-7 text-slate-700">
+                Welcome back. Here is a quick summary of this workspace before you continue.
+              </p>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                Everything is set up and ready, so you can review the project details and continue
+                the next steps smoothly.
               </p>
             </div>
-            <Link
-              href={`/projects/${projectId}/workspace/customer-chat`}
-              className="inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-            >
-              Open chats
-            </Link>
-          </div>
 
-          <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            {recentMessages.length === 0 ? (
-              <div className="px-4 py-5 text-sm text-slate-500">
-                No recent chat activity yet.
-              </div>
-            ) : (
-              recentMessages.map((entry, index) => {
-                const Icon = getChatIcon(entry.channelId)
-
-                return (
-                  <Link
-                    key={entry.id}
-                    href={entry.href}
-                    className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${
-                      index !== recentMessages.length - 1 ? "border-b border-slate-100" : ""
-                    }`}
-                  >
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 text-blue-700">
-                      <Icon size={16} />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">
-                            {entry.senderLabel}
-                          </p>
-                          <p className="truncate text-[11px] text-slate-500">
-                            {entry.channelTitle}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-[11px] font-medium text-slate-400">
-                          {formatWorkspaceChatListTime(entry.message.sentAt)}
-                        </span>
-                      </div>
-
-                      <div className="mt-1 flex items-center justify-between gap-3">
-                        <p className="line-clamp-1 text-sm text-slate-600">
-                          {entry.preview}
-                        </p>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${
-                            entry.isIncoming
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {entry.isIncoming ? "Question" : "Reply"}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })
-            )}
+            <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
+              {summaryItems.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-slate-200 bg-white/85 px-4 py-3 shadow-sm"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900 sm:text-[15px]">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

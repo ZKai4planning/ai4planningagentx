@@ -1,5 +1,5 @@
 "use client"
-import CustomerJourney from "@/components/CustomerJourney"
+import CustomerJourney, { type JourneyStep } from "@/components/CustomerJourney"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
@@ -7,7 +7,6 @@ import axiosInstance from "@/lib/axiosinstance"
 import {
   eligibilityFieldMappings,
   getEligibilityApplicantName,
-  getEligibilityCorrespondenceAddress,
   getEligibilityFieldValue,
   getEligibilityResourceValue,
   getEligibilitySiteAddress,
@@ -25,8 +24,6 @@ import {
   Send,
   X,
   Upload,
-  ChevronDown,
-  ChevronUp,
   Building2,
   Calendar,
   Ruler,
@@ -41,7 +38,6 @@ import {
   Home,
   Shield,
   TreePine,
-  Droplets,
   Info,
   FileCheck,
   Video,
@@ -50,6 +46,7 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
+import EligibilityDetailsCard from "./components/EligibilityDetailsCard"
 import {
   defaultWorkspaceRoadmap,
   getWorkspaceRoadmap,
@@ -109,12 +106,6 @@ const longEligibilityFieldKeys = new Set<EligibilityFieldKey>([
   "agentAddress",
 ])
 
-const defaultExpandedEligibilityGroups: Record<string, boolean> = {
-  "applicant-property": true,
-  "works-materials": true,
-  "site-constraints": true,
-}
-
 const submissionApplicantFieldKeys: EligibilityFieldKey[] = [
   "emailAddress",
   "countryCode",
@@ -165,179 +156,8 @@ const constraintSupportFieldKeys: EligibilityFieldKey[] = [
   "additionalConsents",
 ]
 
-const eligibilityDetailGroups: Array<{
-  id: string
-  title: string
-  tone: "blue" | "indigo" | "amber" | "emerald"
-  fieldKeys: EligibilityFieldKey[]
-  extraRows?: (eligibility: EligibilityData) => EligibilityRow[]
-}> = [
-  {
-    id: "applicant-property",
-    title: "Applicant + Property",
-    tone: "blue",
-    fieldKeys: [
-      "applicantFirstName",
-      "applicantMiddleName",
-      "applicantLastName",
-      "emailAddress",
-      "countryCode",
-      "phoneNumber",
-      "council",
-      "propertyType",
-      "ownershipStatus",
-      "purposeOfDevelopment",
-      "nearConservationAreaOrListedBuilding",
-      "usesPlanningAgent",
-      "agentName",
-      "agentContactEmailPhone",
-      "agentAddress",
-    ],
-    extraRows: (eligibility) => [
-      {
-        key: "siteAddress",
-        label: "Site Address",
-        value: getEligibilitySiteAddress(eligibility) ?? "-",
-        kind: "block",
-      },
-      {
-        key: "postcode",
-        label: "Postcode",
-        value: formatEligibilityFieldValue(eligibility, "postcode"),
-      },
-      {
-        key: "useAlternateCorrespondenceAddress",
-        label: "Alternate address for correspondence?",
-        value: formatEligibilityFieldValue(eligibility, "useAlternateCorrespondenceAddress"),
-      },
-      {
-        key: "correspondenceAddress",
-        label: "Correspondence Address",
-        value: getEligibilityCorrespondenceAddress(eligibility) ?? "-",
-        kind: "block",
-      },
-    ],
-  },
-  {
-    id: "council-history",
-    title: "Council / Previous Applications",
-    tone: "indigo",
-    fieldKeys: [
-      "hasPreviousCouncilApplication",
-      "previousProposalDetails",
-      "planningReferenceNumber",
-      "previousApplicationType",
-      "previousDevelopmentType",
-      "projectComparison",
-    ],
-  },
-  {
-    id: "property-occupancy",
-    title: "Property + Occupancy",
-    tone: "blue",
-    fieldKeys: [
-      "previouslyExtended",
-      "currentUseStatus",
-      "currentOccupantsCount",
-      "currentHouseholdArrangement",
-      "plannedOccupantsCount",
-      "sharedKitchenBathroom",
-      "roomsRentedIndividually",
-      "availableBedroomsCount",
-      "bathroomsOrShowerRoomsCount",
-      "hasCommunalKitchen",
-      "loungeDiningRoomAsBedroom",
-      "smallestBedroomSize",
-    ],
-  },
-  {
-    id: "works-materials",
-    title: "Works + Materials",
-    tone: "indigo",
-    fieldKeys: [
-      "proposedWorksDescription",
-      "existingPropertyWidthM",
-      "existingPropertyDepthM",
-      "proposedExtensionWidthM",
-      "proposedExtensionDepthM",
-      "ridgeOrEavesHeightM",
-      "distanceFromBoundaryM",
-      "totalInternalFloorArea",
-      "numberOfFloors",
-      "propertyFootprint",
-      "gardenDepth",
-      "plotWidth",
-      "kitchenRoomLengthM",
-      "kitchenRoomWidthM",
-      "bathroomRoomLengthM",
-      "bathroomRoomWidthM",
-      "wallMaterials",
-      "roofMaterials",
-      "colourOrFinishNotes",
-      "materialsMatchExisting",
-    ],
-  },
-  {
-    id: "site-constraints",
-    title: "Site Constraints",
-    tone: "amber",
-    fieldKeys: [
-      "isListedBuilding",
-      "isInConservationArea",
-      "newOrAlteredAccess",
-      "accessOrParkingChanges",
-      "proposedParkingSpaces",
-      "cycleStorageProvisions",
-      "treesWithTPO",
-      "treesWithinFallingDistance",
-      "treeSpecies",
-      "approximateTreeSizeM",
-      "isSiteInFloodRiskArea",
-      "isSiteContaminatedLand",
-      "soughtPreAppAdvice",
-      "preApplicationReferenceNumber",
-      "dateOfPreAppAdvice",
-      "officerName",
-      "preApplicationAdviceSummary",
-    ],
-  },
-  {
-    id: "utilities-consents",
-    title: "Utilities + Consents",
-    tone: "emerald",
-    fieldKeys: [
-      "smokeAlarmsInstalled",
-      "gasSafetyCertificate",
-      "electricalReportEicr",
-      "epcAvailable",
-      "waterSupply",
-      "sewageOrDrainage",
-      "surfaceWaterDrainage",
-      "existingWasteArrangements",
-      "renewableEnergyProposals",
-      "renewableEnergyDetails",
-      "certificateOfOwnership",
-      "ownershipDetails",
-      "additionalConsents",
-      "communityConsultation",
-    ],
-  },
-  {
-    id: "declarations",
-    title: "Declarations",
-    tone: "blue",
-    fieldKeys: [
-      "informationAccurate",
-      "authorityConfirmed",
-      "privateRightsAcknowledged",
-      "publicDataConsent",
-      "feeAgreementAccepted",
-      "signatoryFullName",
-      "signedDate",
-      "signatoryCapacity",
-    ],
-  },
-]
+const eligibilityReviewBrief =
+  "Hi Agent X, Customer has selected the Mandatory HMO Licence service for London Borough of Newham Council. Please review and verify all applicable Newham HMO licensing regulations, property compliance standards, and statutory requirements, including occupancy limits, minimum room sizes, fire safety measures, amenity provisions, waste management, and landlord fit-and-proper person criteria. Ensure the property is assessed against current council standards before progressing with the licence application."
 
 function getInitialSection(sectionParam: string | null): SectionId {
   if (sectionParam === "communication" || sectionParam === "chat") {
@@ -484,53 +304,9 @@ function buildEligibilityRows(
   }))
 }
 
-function isAnsweredEligibilityValue(value: string) {
-  return value !== "-"
-}
-
 function formatDimensionSummary(first: string, second: string) {
   if (first === "-" || second === "-") return "-"
   return `${first}m x ${second}m`
-}
-
-function getToneIcon(tone: "blue" | "indigo" | "amber" | "emerald") {
-  switch (tone) {
-    case "blue":
-      return <Home size={14} className="text-blue-600" />
-    case "indigo":
-      return <Ruler size={14} className="text-indigo-600" />
-    case "amber":
-      return <Shield size={14} className="text-amber-600" />
-    case "emerald":
-      return <Droplets size={14} className="text-emerald-600" />
-    default:
-      return <FileCheck size={14} className="text-blue-600" />
-  }
-}
-
-function getEligibilityToneClasses(tone: "blue" | "indigo" | "amber" | "emerald") {
-  switch (tone) {
-    case "blue":
-      return {
-        card: "border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50",
-        badge: "bg-blue-100 text-blue-700 border-blue-200",
-      }
-    case "indigo":
-      return {
-        card: "border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-slate-50",
-        badge: "bg-indigo-100 text-indigo-700 border-indigo-200",
-      }
-    case "amber":
-      return {
-        card: "border-amber-100 bg-gradient-to-br from-amber-50 via-white to-slate-50",
-        badge: "bg-amber-100 text-amber-700 border-amber-200",
-      }
-    case "emerald":
-      return {
-        card: "border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-slate-50",
-        badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
-      }
-  }
 }
 
 function buildRoadmapWithEligibility(
@@ -607,10 +383,6 @@ export default function UserDetailsPage() {
   )
   const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
   const [eligibilityLoading, setEligibilityLoading] = useState(true)
-  const [showEmptyEligibilityFields, setShowEmptyEligibilityFields] = useState(false)
-  const [expandedEligibilityGroups, setExpandedEligibilityGroups] = useState<Record<string, boolean>>(
-    defaultExpandedEligibilityGroups
-  )
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const router = useRouter()
   const roadmapStages = roadmap.stages
@@ -894,30 +666,6 @@ export default function UserDetailsPage() {
   const locationPlanUrl = eligibilityData
     ? getEligibilityResourceValue(eligibilityData, "locationPlan")
     : undefined
-  const sitePlanUrl = eligibilityData
-    ? getEligibilityResourceValue(eligibilityData, "sitePlan")
-    : undefined
-  const existingAndProposedElevationsUrl = eligibilityData
-    ? getEligibilityResourceValue(eligibilityData, "existingAndProposedElevations")
-    : undefined
-  const additionalDrawingsUrl = eligibilityData
-    ? getEligibilityResourceValue(eligibilityData, "additionalDrawings")
-    : undefined
-  const photographsOfSiteUrl = eligibilityData
-    ? getEligibilityResourceValue(eligibilityData, "photographsOfSite")
-    : undefined
-  const floodRiskAssessmentReportUrl = eligibilityData
-    ? getEligibilityResourceValue(eligibilityData, "floodRiskAssessmentReport")
-    : undefined
-  const treeSurveyReportUrl = eligibilityData
-    ? getEligibilityResourceValue(eligibilityData, "treeSurveyReport")
-    : undefined
-  const toggleEligibilityGroup = (groupId: string) => {
-    setExpandedEligibilityGroups((prev) => ({
-      ...prev,
-      [groupId]: !(prev[groupId] ?? false),
-    }))
-  }
   const submissionApplicantRows = eligibilityData
     ? [
         { key: "applicantName", label: "Applicant Name", value: applicantName },
@@ -945,48 +693,6 @@ export default function UserDetailsPage() {
   const constraintSupportRows = eligibilityData
     ? buildEligibilityRows(eligibilityData, constraintSupportFieldKeys)
     : []
-  const eligibilityDetailSections = eligibilityData
-    ? eligibilityDetailGroups.map((group) => ({
-        ...group,
-        rows: [
-          ...buildEligibilityRows(eligibilityData, group.fieldKeys),
-          ...(group.extraRows ? group.extraRows(eligibilityData) : []),
-        ],
-        links:
-          group.id === "works-materials"
-            ? [
-                { label: "Location Plan", url: locationPlanUrl },
-                { label: "Site Plan", url: sitePlanUrl },
-                { label: "Elevations", url: existingAndProposedElevationsUrl },
-                { label: "Additional Drawings", url: additionalDrawingsUrl },
-                { label: "Site Photographs", url: photographsOfSiteUrl },
-              ].filter((item) => typeof item.url === "string")
-            : group.id === "site-constraints"
-            ? [
-                { label: "Flood Risk Assessment", url: floodRiskAssessmentReportUrl },
-                { label: "Tree Survey Report", url: treeSurveyReportUrl },
-              ].filter((item) => typeof item.url === "string")
-            : [],
-      }))
-        .map((group) => {
-          const answeredCount = group.rows.filter((row) =>
-            isAnsweredEligibilityValue(row.value)
-          ).length
-          const visibleRows = showEmptyEligibilityFields
-            ? group.rows
-            : group.rows.filter((row) => isAnsweredEligibilityValue(row.value))
-
-          return {
-            ...group,
-            answeredCount,
-            totalCount: group.rows.length,
-            visibleRows,
-          }
-        })
-    : []
-  const answeredEligibilitySectionCount = eligibilityDetailSections.filter(
-    (group) => group.answeredCount > 0 || group.links.length > 0
-  ).length
   const customer = {
     name: applicantName,
     phone: applicantPhone,
@@ -1033,7 +739,7 @@ export default function UserDetailsPage() {
       ? "Live project details derived from the connected eligibility record."
       : "No live project metadata connected yet.",
     service: purposeOfDevelopment,
-    serviceType: propertyType,
+    serviceType: "Mandatory HMO License", //propertyType,
     serviceNo: "-",
     stage: activeRoadmapStage?.label ?? "Unknown",
     location: siteAddress,
@@ -1072,7 +778,7 @@ export default function UserDetailsPage() {
     total: "-",
     breakdown: [] as { label: string; amount: string; pct: number }[],
   }
-  const journeySteps = roadmapStages.map((stage) =>
+  const journeySteps: JourneyStep[] = roadmapStages.map((stage): JourneyStep =>
     stage.id === "received-checklist"
       ? {
           ...stage,
@@ -1087,11 +793,21 @@ export default function UserDetailsPage() {
       : stage.id === "eligibility-check" && eligibilityData
       ? {
           ...stage,
+          calloutLabel: eligibilityData.completionStatus.isCompleted
+            ? "Agent Z Response to you"
+            : undefined,
           details: pendingEligibilitySteps,
           detailsLabel: "Pending eligibility sections",
           desc: eligibilityData.completionStatus.isCompleted
-            ? "Eligibility form completed and ready for the next stage."
+            ? "Newham HMO licensing review ready for verification."
             : `Eligibility form is ${eligibilityData.completionStatus.percentage}% complete.`,
+          calloutTypewriterText: eligibilityData.completionStatus.isCompleted
+            ? eligibilityReviewBrief
+            : undefined,
+          calloutStyle: eligibilityData.completionStatus.isCompleted
+            ? "eligibility"
+            : undefined,
+          hideNextLabel: eligibilityData.completionStatus.isCompleted,
         }
       : stage
   )
@@ -1421,99 +1137,19 @@ export default function UserDetailsPage() {
                     <div className="flex items-center gap-2 mb-4">
                       <FileCheck size={18} className="text-blue-600" />
                       <h2 className="text-lg font-bold text-slate-900">
-                        Eligibility Details
+                        Eligibility Check
                       </h2>
                     </div>
-
-                    {eligibilityLoading ? (
-                      <div className="rounded-xl border bg-slate-50 p-5 text-sm text-slate-500">
-                        Loading eligibility details...
-                      </div>
-                    ) : eligibilityData ? (
-                      <div className="space-y-4">
-                        <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-4">
-                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                              <EligibilitySummaryItem label="Applicant" value={applicantName} />
-                              <EligibilitySummaryItem label="Site Address" value={siteAddress} />
-                              <EligibilitySummaryItem label="Property Type" value={propertyType} />
-                              <EligibilitySummaryItem label="Council" value={councilName} />
-                              <EligibilitySummaryItem
-                                label="Completion"
-                                value={`${eligibilityData.completionStatus.percentage}%`}
-                                hint={formatEligibilityStatus(eligibilityData.status)}
-                              />
-                            </div>
-                            <div className="flex items-center gap-2 self-start">
-                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                                {answeredEligibilitySectionCount}/{eligibilityDetailSections.length} sections answered
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setShowEmptyEligibilityFields((prev) => !prev)}
-                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                              >
-                                {showEmptyEligibilityFields ? "Hide empty fields" : "Show empty fields"}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-4">
-                          {eligibilityDetailSections.map((group) => (
-                            <EligibilitySectionCard
-                              key={group.id}
-                              title={group.title}
-                              icon={getToneIcon(group.tone)}
-                              tone={group.tone}
-                              expanded={expandedEligibilityGroups[group.id] ?? false}
-                              answeredCount={group.answeredCount}
-                              totalCount={group.totalCount}
-                              onToggle={() => toggleEligibilityGroup(group.id)}
-                            >
-                              {group.visibleRows.length > 0 ? (
-                                <div className="space-y-2 text-sm text-slate-700">
-                                  {group.visibleRows.map((row) => (
-                                    <EligibilityValueRow
-                                      key={`${group.id}-${row.key}`}
-                                      label={row.label}
-                                      value={row.value}
-                                      kind={row.kind}
-                                    />
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-500">
-                                  {showEmptyEligibilityFields
-                                    ? "No fields are available in this section yet."
-                                    : "No answered fields in this section yet."}
-                                </div>
-                              )}
-                              {group.links.length > 0 ? (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {group.links.map((link) => (
-                                    <EligibilityDocumentLink
-                                      key={`${group.id}-${link.label}`}
-                                      label={link.label}
-                                      href={link.url as string}
-                                    />
-                                  ))}
-                                </div>
-                              ) : null}
-                            </EligibilitySectionCard>
-                          ))}
-                        </div>
-
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border bg-slate-50 p-5 text-sm text-slate-500">
-                        No eligibility details were found for this project.
-                      </div>
-                    )}
+                    <EligibilityDetailsCard
+                      eligibilityData={eligibilityData}
+                      loading={eligibilityLoading}
+                      projectId={projectId}
+                    />
                   </div>
                 )}
 
                 {/* Project Header */}
-                <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border p-5 mb-6">
+                {/* <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border p-5 mb-6">
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="text-xl font-bold text-slate-900 mb-1">
@@ -1546,7 +1182,7 @@ export default function UserDetailsPage() {
                       </p>
                     </div>
                   </div>
-                </div>
+                </div> */}
 
                 {/* Project Details Grid */}
                 <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -1574,16 +1210,16 @@ export default function UserDetailsPage() {
 
                 {/* Snapshot cards to keep overview concise */}
                 <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
-                  <OverviewCard
+                  {/* <OverviewCard
                     title="Form Submission"
                     icon={<FileCheck size={14} className="text-emerald-600" />}
                   >
                     <p className="text-sm font-semibold text-slate-900">{formSubmission.purposeOfDevelopment}</p>
                     <p className="text-xs text-slate-500 mt-1">{formSubmission.propertyType}</p>
                     <p className="text-xs text-slate-500 mt-1">{formSubmission.siteAddress}</p>
-                  </OverviewCard>
+                  </OverviewCard> */}
 
-                  <OverviewCard
+                  {/* <OverviewCard
                     title="Dimensions"
                     icon={<Ruler size={14} className="text-blue-600" />}
                   >
@@ -1607,9 +1243,9 @@ export default function UserDetailsPage() {
                         </span>
                       </div>
                     </div>
-                  </OverviewCard>
+                  </OverviewCard> */}
 
-                  <OverviewCard
+                  {/* <OverviewCard
                     title="Constraints"
                     icon={<Shield size={14} className="text-amber-600" />}
                   >
@@ -1619,9 +1255,9 @@ export default function UserDetailsPage() {
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">Flood: {formSubmission.floodZone}</span>
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700">Access: {formSubmission.vehicleAccess}</span>
                     </div>
-                  </OverviewCard>
+                  </OverviewCard> */}
 
-                  <OverviewCard
+                  {/* <OverviewCard
                     title="Requirements"
                     icon={<FileText size={14} className="text-indigo-600" />}
                   >
@@ -1633,9 +1269,9 @@ export default function UserDetailsPage() {
                         </li>
                       ))}
                     </ul>
-                  </OverviewCard>
+                  </OverviewCard> */}
 
-                  <OverviewCard
+                  {/* <OverviewCard
                     title="Customer Journey"
                     icon={<TrendingUp size={14} className="text-blue-600" />}
                   >
@@ -1648,7 +1284,7 @@ export default function UserDetailsPage() {
                     <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
                       <div className="h-full bg-blue-600" style={{ width: `${progressValue}%` }} />
                     </div>
-                  </OverviewCard>
+                  </OverviewCard> */}
 
                   <OverviewCard
                     title="User Profile"
@@ -1726,8 +1362,8 @@ export default function UserDetailsPage() {
                 <div className="grid md:grid-cols-3 gap-4 mb-6">
                   <MetaBox
                     icon={<Building2 size={14} className="text-blue-500" />}
-                    label="Property Type"
-                    value={requirements.propertyType}
+                    label="Service Name"
+                    value="Mandatory HMO License" // {requirements.propertyType}
                   />
                   <MetaBox
                     icon={<MapPin size={14} className="text-rose-500" />}
@@ -2392,150 +2028,6 @@ function FlowStepCard({
       </div>
       <p className="text-xs leading-relaxed">{desc}</p>
     </div>
-  )
-}
-
-function EligibilitySummaryItem({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint?: string
-}) {
-  return (
-    <div className="rounded-xl border border-white/80 bg-white/80 px-3.5 py-3 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
-    </div>
-  )
-}
-
-function EligibilitySectionCard({
-  title,
-  icon,
-  tone,
-  expanded,
-  answeredCount,
-  totalCount,
-  onToggle,
-  children,
-}: {
-  title: string
-  icon: React.ReactNode
-  tone: "blue" | "indigo" | "amber" | "emerald"
-  expanded: boolean
-  answeredCount: number
-  totalCount: number
-  onToggle: () => void
-  children: React.ReactNode
-}) {
-  const styles = getEligibilityToneClasses(tone)
-
-  return (
-    <div className={`rounded-2xl border p-4 ${styles.card}`}>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-start justify-between gap-3 text-left"
-        aria-expanded={expanded}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          {icon}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">
-              {title}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              {answeredCount}/{totalCount} fields answered
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles.badge}`}
-          >
-            {answeredCount}/{totalCount}
-          </span>
-          <span className="rounded-full border border-white/80 bg-white/80 p-1 text-slate-500">
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </span>
-        </div>
-      </button>
-      {expanded ? <div className="mt-4">{children}</div> : null}
-    </div>
-  )
-}
-
-function EligibilityValueRow({
-  label,
-  value,
-  kind = "default",
-}: {
-  label: string
-  value: string
-  kind?: "default" | "block"
-}) {
-  const isBooleanValue = value === "Yes" || value === "No"
-
-  if (kind === "block") {
-    return (
-      <div className="rounded-xl border border-white/80 bg-white/85 px-4 py-3 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          {label}
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-800">{value}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-xl border border-white/80 bg-white/85 px-4 py-3 shadow-sm">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          {label}
-        </span>
-        {isBooleanValue ? (
-          <span
-            className={`inline-flex self-start rounded-full px-2.5 py-1 text-xs font-semibold ${
-              value === "Yes"
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-rose-100 text-rose-700"
-            }`}
-          >
-            {value}
-          </span>
-        ) : (
-          <span className="text-sm font-semibold text-slate-800 sm:max-w-[58%] sm:text-right">
-            {value}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function EligibilityDocumentLink({
-  label,
-  href,
-}: {
-  label: string
-  href: string
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
-    >
-      <ExternalLink size={14} />
-      {label}
-    </a>
   )
 }
 
