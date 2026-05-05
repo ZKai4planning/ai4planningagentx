@@ -20,6 +20,7 @@ export type WorkspaceStageId =
   | "payments-generate-quote"
   | "final-review-check"
   | "council-submission"
+  | "Briefcase-x"
 
 export type WorkspaceStageAction =
   | {
@@ -41,6 +42,7 @@ export interface WorkspaceRoadmapStage {
   desc: string
   opensSection: WorkspaceSectionId
   queryStep?: string
+  fileType?: string
   callout?: "assign-agent-y"
   action?: WorkspaceStageAction
 }
@@ -105,6 +107,14 @@ export const defaultWorkspaceRoadmap: WorkspaceRoadmapResponse = {
         targetStageId: "final-review-check",
         targetSection: "project",
       },
+    },
+    {
+      id: "Briefcase-x",
+      label: "Briefcase X -> Y",
+      desc: "Transition from Briefcase X to Briefcase Y.",
+      opensSection: "documents",
+      queryStep: "briefcase-transition",
+      fileType: "documents",
     },
     {
       id: "final-review-check",
