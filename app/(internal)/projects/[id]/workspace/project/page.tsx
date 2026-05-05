@@ -118,6 +118,18 @@ type FinalReviewChecklistGroup = {
   items: FinalReviewChecklistItem[]
 }
 
+type BriefcaseDocumentItem = {
+  label: string
+  status: string
+  href?: string
+  fileName?: string
+  fileType?: string
+  uploadedAt?: string
+  source?: string
+  note?: string
+  group?: string
+}
+
 type QuoteService = {
   id: string;
   title: string;
@@ -203,6 +215,18 @@ const roadmapDocumentActions = [
   { label: "Awaiting from Customer", value: "awaiting" },
   { label: "Received Document", value: "received" },
 ]
+
+const agentZTriggerHeadlines = new Set([
+  "PLANNING TRIGGERS",
+  "LICENSING TRIGGERS (MANDATORY HMO LICENCE)",
+  "BUILDING CONTROL TRIGGERS",
+  "BEDROOM SIZE REQUIREMENTS (NEWHAM)",
+  "COMMUNAL SPACE (KITCHEN ONLY)",
+  "COMMUNAL SPACE (KITCHEN + SEPARATE LIVING ROOM)",
+  "OPEN-PLAN KITCHEN / LOUNGE",
+  "REPORTS & SURVEYS",
+  "COMPLIANCE CERTIFICATES",
+])
 
 function getInitialSection(sectionParam: string | null): SectionId {
   if (sectionParam === "communication" || sectionParam === "chat") return "communication"
@@ -322,6 +346,39 @@ function findChecklistDocumentByKeywords(docs: ChecklistDoc[], keywords: string[
   })
 }
 
+function getChecklistPreviewMeta(doc?: ChecklistDoc) {
+  if (!doc) return {}
+
+  if (doc.customerUpload) {
+    return {
+      fileName: doc.customerUpload.name,
+      uploadedAt: doc.customerUpload.uploadedAt,
+      source: "Customer upload",
+    }
+  }
+
+  if (doc.agentXUpload) {
+    return {
+      fileName: doc.agentXUpload.name,
+      uploadedAt: doc.agentXUpload.uploadedAt,
+      source: "Agent X upload",
+    }
+  }
+
+  if (doc.agentYUpload) {
+    return {
+      fileName: doc.agentYUpload.name,
+      uploadedAt: doc.agentYUpload.uploadedAt,
+      source: "Agent Y upload",
+    }
+  }
+
+  return {
+    fileName: doc.name,
+    source: doc.requestedByAgentX || doc.requestedToAgentY ? "Request raised" : "No file uploaded yet",
+  }
+}
+
 function formatEligibilityFieldValue(eligibility: EligibilityData | null, fieldKey: EligibilityFieldKey): string {
   if (!eligibility) return "-"
   const mapping = eligibilityFieldMappings[fieldKey]
@@ -402,6 +459,7 @@ export default function UserDetailsPage() {
   const [quoteGenerated, setQuoteGenerated] = useState(false)
   const [quoteHistory, setQuoteHistory] = useState<GeneratedQuote[]>([]);
   const [viewingQuote, setViewingQuote] = useState<GeneratedQuote | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<BriefcaseDocumentItem | null>(null)
   
   const router = useRouter()
   const roadmapStages = roadmap.stages
@@ -538,6 +596,15 @@ export default function UserDetailsPage() {
       ...prev,
       [briefcaseKey]: true,
     }))
+  }
+
+  const handleViewDocument = (item: BriefcaseDocumentItem) => {
+    if (item.href) {
+      window.open(item.href, "_blank", "noopener,noreferrer")
+      return
+    }
+
+    setViewingDocument(item)
   }
 
   const handleAssignDialogOpenChange = (nextOpen: boolean) => {
@@ -696,10 +763,65 @@ export default function UserDetailsPage() {
   const complianceDocumentsComplete = [gasSafetyCertificate, electricalReportEicr, epcAvailable].every((value) => value === "Yes")
 
   const triggerRoadmapItems = [
-    { id: "trigger-survey", label: "Survey", selectedAction: journeyFieldActions["trigger-survey"] ?? (dimensionsCompleted ? "received" : "awaiting"), actions: roadmapDocumentActions },
-    { id: "trigger-dimensions", label: "Dimensions", selectedAction: journeyFieldActions["trigger-dimensions"] ?? (dimensionsCompleted ? "received" : "awaiting"), actions: roadmapDocumentActions },
-    { id: "trigger-compliance-documents", label: "Compliance documents", selectedAction: journeyFieldActions["trigger-compliance-documents"] ?? (complianceDocumentsComplete ? "received" : "awaiting"), actions: roadmapDocumentActions },
-  ]
+    {
+      id: "trigger-survey",
+      label: "Survey",
+      details: [
+        "PLANNING TRIGGERS",
+        "Property moves from C3 (single dwelling) -> C4 (small HMO)",
+        "LICENSING TRIGGERS (MANDATORY HMO LICENCE)",
+        "5 or more occupants",
+        "BUILDING CONTROL TRIGGERS",
+        "New partitions or walls are added",
+        "Rear Extension is involved",
+        "New bathrooms or kitchens are added",
+      ],
+      selectedAction: journeyFieldActions["trigger-survey"] ?? (dimensionsCompleted ? "received" : "awaiting"),
+      actions: roadmapDocumentActions,
+    },
+    {
+      id: "trigger-dimensions",
+      label: "Dimensions & Space Standards",
+      details: [
+        "BEDROOM SIZE REQUIREMENTS (NEWHAM)",
+        "Single Occupancy: 6.51m² (min) / 7.5m² (recommended)",
+        "Double Occupancy: 10.22m² (min) / 11m² (recommended)",
+        "Rooms under 4.64m²: Cannot be used as bedroom (storage only)",
+        "Must have: Natural light, Heating, Ventilation",
+        "COMMUNAL SPACE (KITCHEN ONLY)",
+        "5 occupants: 7m²",
+        "6–7 occupants: 10m²",
+        "8–10 occupants: 11.5m²",
+        "COMMUNAL SPACE (KITCHEN + SEPARATE LIVING ROOM)",
+        "Kitchen: 5m² minimum",
+        "Living Room: 11m² for 5 people (+1m² per additional person)",
+        "OPEN-PLAN KITCHEN / LOUNGE",
+        "5 occupants: 15m²",
+        "6–7 occupants: 18m²",
+        "8–10 occupants: 20m²",
+      ],
+      selectedAction: journeyFieldActions["trigger-dimensions"] ?? (dimensionsCompleted ? "received" : "awaiting"),
+      actions: roadmapDocumentActions,
+    },
+    {
+      id: "trigger-compliance-documents",
+      label: "Compliance & Reports",
+      details: [
+        "REPORTS & SURVEYS",
+        "Site Measurement Survey",
+        "Existing & Proposed Plans",
+        "Arboriculture / BS5837 Report",
+        "Flood Risk Assessment",
+        "COMPLIANCE CERTIFICATES",
+        "Smoke Alarms Compliance",
+        "Gas Safety Certificate",
+        "Electrical Report (EICR)",
+        "Energy Performance Certificate (EPC)",
+      ],
+      selectedAction: journeyFieldActions["trigger-compliance-documents"] ?? (complianceDocumentsComplete ? "received" : "awaiting"),
+      actions: roadmapDocumentActions,
+    },
+  ];
   
   // Services State
   const [newServiceName, setNewServiceName] = useState("");
@@ -770,10 +892,10 @@ export default function UserDetailsPage() {
 
   const briefcaseRoadmapItems = allRequiredDocsCompleted ? ["Documents Briefcase", "Compliance Briefcase", "Drawings Briefcase"] : []
   const pendingDocumentsJourneyGroups = [
+    { label: "Triggers", items: triggerRoadmapItems },
     { label: "Documents", items: documentRoadmapItems },
     { label: "Compliance", items: complianceRoadmapItems },
     { label: "Drawings", items: drawingsRoadmapItems },
-    { label: "Triggers", items: triggerRoadmapItems },
     { label: "Briefcases", items: briefcaseRoadmapItems },
   ]
   
@@ -792,52 +914,52 @@ export default function UserDetailsPage() {
   const planningDoc = findChecklistDocumentByKeywords(documentState.checklist, ["planning permission", "planning certificate", "planning reference"])
 
   // --- BRIEFCASE DATA DERIVATION ---
-  const documentationItems = [
-    { label: "Gas Safety Certificate (CP12)", status: gasSafetyCertificate === "Yes" ? "Received" : "Missing" },
-    { label: "Electrical Report (EICR)", status: electricalReportEicr === "Yes" ? "Received" : "Missing" },
-    { label: "Energy Performance Certificate (EPC)", status: epcAvailable === "Yes" ? "Received" : "Missing" },
-    { label: "Fire Risk Assessment", status: fireRiskDoc ? "Received" : "Missing" },
-    { label: "Existing Planning Permissions", status: planningDoc ? "Provided" : "Unknown" },
-    { label: "Management Plan", status: managementPlanDoc ? "Provided" : "Missing" },
-    { label: "Fit & Proper Declaration", status: fitAndProperDoc ? "Provided" : "Missing" },
-    { label: "Tenancy Agreements", status: tenancyAgreementDoc ? "Provided" : "Missing" },
-    { label: "Ownership/Lease/Mortgage Consents", status: ownershipDoc ? "Provided" : "Missing" },
+  const documentationItems: BriefcaseDocumentItem[] = [
+    { label: "Gas Safety Certificate (CP12)", status: gasSafetyCertificate === "Yes" ? "Received" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(gasSafetyDoc) },
+    { label: "Electrical Report (EICR)", status: electricalReportEicr === "Yes" ? "Received" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(eicrDoc) },
+    { label: "Energy Performance Certificate (EPC)", status: epcAvailable === "Yes" ? "Received" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(epcDoc) },
+    { label: "Fire Risk Assessment", status: fireRiskDoc ? "Received" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(fireRiskDoc) },
+    { label: "Existing Planning Permissions", status: planningDoc ? "Provided" : "Unknown", fileType: ".pdf", ...getChecklistPreviewMeta(planningDoc) },
+    { label: "Management Plan", status: managementPlanDoc ? "Provided" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(managementPlanDoc) },
+    { label: "Fit & Proper Declaration", status: fitAndProperDoc ? "Provided" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(fitAndProperDoc) },
+    { label: "Tenancy Agreements", status: tenancyAgreementDoc ? "Provided" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(tenancyAgreementDoc) },
+    { label: "Ownership/Lease/Mortgage Consents", status: ownershipDoc ? "Provided" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(ownershipDoc ?? leaseholderConsentDoc ?? lenderConsentDoc) },
   ];
 
-  const complianceItems = [
+  const complianceItems: BriefcaseDocumentItem[] = [
     // Fire Safety
-    { label: "Smoke/heat alarm layout", status: smokeAlarmsInstalled === "Yes" ? "Provided" : "Missing", group: "Fire Safety" },
-    { label: "Fire doors (FD30)", status: fireRiskDoc ? "Confirmed" : "Unconfirmed", group: "Fire Safety" },
-    { label: "Escape routes", status: fireRiskDoc ? "Compliant" : "Unknown", group: "Fire Safety" },
-    { label: "Emergency lighting", status: "Evidence Missing", group: "Fire Safety" },
+    { label: "Smoke/heat alarm layout", status: smokeAlarmsInstalled === "Yes" ? "Provided" : "Awaiting Response", group: "Fire Safety", note: "Alarm layout evidence is reviewed from safety compliance responses." },
+    { label: "Fire doors (FD30)", status: fireRiskDoc ? "Confirmed" : "Unconfirmed", group: "Fire Safety", fileType: ".pdf", ...getChecklistPreviewMeta(fireRiskDoc) },
+    { label: "Escape routes", status: fireRiskDoc ? "Compliant" : "Unknown", group: "Fire Safety", fileType: ".pdf", ...getChecklistPreviewMeta(fireRiskDoc) },
+    { label: "Emergency lighting", status: "Awaiting Response", group: "Fire Safety", note: "No emergency-lighting evidence is linked yet in the workspace." },
     // Amenities
-    { label: "Kitchen adequacy", status: hasCommunalKitchen === "Yes" ? "Pass" : "Pending Evidence", group: "Amenities" },
-    { label: "Bathroom ratio", status: bathroomsOrShowerRoomsCount !== "-" ? "Pass" : "Pending Evidence", group: "Amenities" },
-    { label: "Ventilation/heating", status: dimensionsCompleted ? "Pass" : "Unknown", group: "Amenities" },
+    { label: "Kitchen adequacy", status: hasCommunalKitchen === "Yes" ? "Pass" : "Pending Evidence", group: "Amenities", note: "Kitchen adequacy is inferred from communal kitchen and room-dimension answers." },
+    { label: "Bathroom ratio", status: bathroomsOrShowerRoomsCount !== "-" ? "Pass" : "Pending Evidence", group: "Amenities", note: "Bathroom ratio is reviewed from the occupant and bathroom counts." },
+    { label: "Ventilation/heating", status: dimensionsCompleted ? "Pass" : "Unknown", group: "Amenities", note: "Ventilation and heating evidence depends on room measurements and layout data." },
     // Environmental
-    { label: "Water supply", status: waterSupply !== "-" ? "Verified" : "Unverified", group: "Environmental" },
-    { label: "Sewage/drainage", status: sewageOrDrainage !== "-" ? "Verified" : "Unverified", group: "Environmental" },
-    { label: "Surface water drainage", status: surfaceWaterDrainage !== "-" ? "Verified" : "Unverified", group: "Environmental" },
-    { label: "Waste arrangements", status: existingWasteArrangements !== "-" ? "Compliant" : "Unknown", group: "Environmental" },
+    { label: "Water supply", status: waterSupply !== "-" ? "Verified" : "Unverified", group: "Environmental", note: "Water-supply evidence is based on the utility answers collected in eligibility." },
+    { label: "Sewage/drainage", status: sewageOrDrainage !== "-" ? "Verified" : "Unverified", group: "Environmental", note: "Drainage evidence is based on the sewage and drainage responses." },
+    { label: "Surface water drainage", status: surfaceWaterDrainage !== "-" ? "Verified" : "Unverified", group: "Environmental", note: "Surface-water evidence is based on the site drainage answers." },
+    { label: "Waste arrangements", status: existingWasteArrangements !== "-" ? "Compliant" : "Unknown", group: "Environmental", note: "Waste arrangement evidence is based on the uploaded or answered waste details." },
     // Space Standards
-    { label: "Bedroom sizes", status: smallestBedroomSize !== "-" ? "Pass" : "Pending Measurements", group: "Space Standards" },
-    { label: "Communal space", status: availableBedroomsCount !== "-" ? "Pass" : "Pending Measurements", group: "Space Standards" },
+    { label: "Bedroom sizes", status: smallestBedroomSize !== "-" ? "Pass" : "Pending Measurements", group: "Space Standards", note: "Bedroom size compliance is reviewed from the smallest bedroom and dimension answers." },
+    { label: "Communal space", status: availableBedroomsCount !== "-" ? "Pass" : "Pending Measurements", group: "Space Standards", note: "Communal space evidence is based on bedroom counts and room-layout details." },
   ];
 
-  const drawingItems = [
-    { label: "Existing floor plans (to scale)", status: hasEligibilityResource(additionalDrawingsUrl) ? "Provided" : "Missing" },
-    { label: "Proposed floor plans (to scale)", status: hasEligibilityResource(additionalDrawingsUrl) ? "Provided" : "Missing" },
-    { label: "Fire safety plan", status: fireRiskDoc ? "Provided" : "Missing" },
-    { label: "Existing & proposed elevations", status: hasEligibilityResource(elevationsUrl) ? "Provided" : "Missing" },
-    { label: "Location plan (1:1250)", status: hasEligibilityResource(locationPlanUrl) ? "Provided" : "Missing" },
-    { label: "Block/site plan", status: hasEligibilityResource(sitePlanUrl) ? "Provided" : "Missing" },
-    { label: "Sections (if structural changes)", status: hasEligibilityResource(additionalDrawingsUrl) ? "Provided" : "Missing" },
+  const drawingItems: BriefcaseDocumentItem[] = [
+    { label: "Existing floor plans (to scale)", status: hasEligibilityResource(additionalDrawingsUrl) ? "Provided" : "Awaiting Response", href: typeof additionalDrawingsUrl === "string" ? additionalDrawingsUrl : undefined, fileType: ".pdf", note: "Open the uploaded drawing pack linked to the project." },
+    { label: "Proposed floor plans (to scale)", status: hasEligibilityResource(additionalDrawingsUrl) ? "Provided" : "Awaiting Response", href: typeof additionalDrawingsUrl === "string" ? additionalDrawingsUrl : undefined, fileType: ".pdf", note: "Open the uploaded proposed drawing set linked to the project." },
+    { label: "Fire safety plan", status: fireRiskDoc ? "Provided" : "Awaiting Response", fileType: ".pdf", ...getChecklistPreviewMeta(fireRiskDoc) },
+    { label: "Existing & proposed elevations", status: hasEligibilityResource(elevationsUrl) ? "Provided" : "Awaiting Response", href: typeof elevationsUrl === "string" ? elevationsUrl : undefined, fileType: ".pdf" },
+    { label: "Location plan (1:1250)", status: hasEligibilityResource(locationPlanUrl) ? "Provided" : "Awaiting Response", href: typeof locationPlanUrl === "string" ? locationPlanUrl : undefined, fileType: ".pdf" },
+    { label: "Block/site plan", status: hasEligibilityResource(sitePlanUrl) ? "Provided" : "Awaiting Response", href: typeof sitePlanUrl === "string" ? sitePlanUrl : undefined, fileType: ".pdf" },
+    { label: "Sections (if structural changes)", status: hasEligibilityResource(additionalDrawingsUrl) ? "Provided" : "Awaiting Response", href: typeof additionalDrawingsUrl === "string" ? additionalDrawingsUrl : undefined, fileType: ".pdf", note: "Section drawings are expected within the additional drawing pack." },
   ];
 
-  const drawingInputs = [
-    { label: "Measurements", status: dimensionsCompleted ? "Complete" : "Partial" },
-    { label: "Site visit data", status: "Available" }, 
-    { label: "Photos", status: hasEligibilityResource(photographsUrl) ? "Provided" : "Missing" },
+  const drawingInputs: BriefcaseDocumentItem[] = [
+    { label: "Measurements", status: dimensionsCompleted ? "Complete" : "Pending Measurements", note: "Measurements are drawn from the eligibility dimension answers." },
+    { label: "Site visit data", status: "Available", note: "Site visit data is available for the drawing briefcase review." }, 
+    { label: "Photos", status: hasEligibilityResource(photographsUrl) ? "Provided" : "Awaiting Response", href: typeof photographsUrl === "string" ? photographsUrl : undefined, fileType: ".jpg" },
   ];
 
   const statusSummaryItems = [
@@ -917,7 +1039,7 @@ export default function UserDetailsPage() {
         <div className="max-w-[1600px] mx-auto px-6 lg:px-8 mt-6">
           <div className="bg-white rounded-2xl border shadow-sm p-6">
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-slate-900">Pending Documents and Triggers</h3>
+              <h3 className="text-lg font-bold text-slate-900">Triggers and Pending Documents</h3>
               <p className="mt-1 text-sm text-slate-500">Separate cards for each category below the roadmap.</p>
             </div>
 
@@ -925,33 +1047,87 @@ export default function UserDetailsPage() {
               {pendingDocumentsJourneyGroups.map((group) =>
                 group.items.length > 0 ? (
                   <div key={group.label} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-                    <p className="mb-3 text-xs font-semibold text-slate-500">{group.label}</p>
+                    <p className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 ring-1 ring-slate-200">
+                      {group.label}
+                    </p>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {group.items.map((item) =>
                         typeof item === "string" ? (
-                          <div key={`${group.label}-${item}`} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700">{item}</div>
+                          <div key={`${group.label}-${item}`} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-800">{item}</div>
                         ) : (
                           (() => {
                             const isReceived = item.selectedAction === "received"
+                            const isAgentZIntelligenceCard = item.id.startsWith("trigger-")
+                            const cardClasses = isAgentZIntelligenceCard
+                              ? "border-slate-900/70 bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 text-white shadow-[0_24px_60px_-34px_rgba(15,23,42,0.85)]"
+                              : isReceived
+                                ? "border-emerald-200 bg-emerald-50/80"
+                                : "border-rose-200 bg-rose-50/80"
                             return (
-                              <div key={`${group.label}-${item.id}`} className={`rounded-2xl border px-3 py-3 ${isReceived ? "border-emerald-200 bg-emerald-50/80" : "border-rose-200 bg-rose-50/80"}`}>
+                              <div key={`${group.label}-${item.id}`} className={`rounded-2xl border px-3 py-3 ${cardClasses}`}>
                                 <div className="flex items-start justify-between gap-3">
-                                  <p className={`text-sm font-semibold ${isReceived ? "text-emerald-900" : "text-rose-900"}`}>{item.label}</p>
-                                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${isReceived ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                                  <div>
+                                    {isAgentZIntelligenceCard ? (
+                                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200">
+                                        Agent Z Intelligence
+                                      </p>
+                                    ) : null}
+                                    <p
+                                      className={`mt-1 text-sm font-bold ${
+                                        isAgentZIntelligenceCard
+                                          ? "text-white"
+                                          : isReceived
+                                            ? "text-emerald-900"
+                                            : "text-rose-900"
+                                      }`}
+                                    >
+                                      {item.label}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                                      isAgentZIntelligenceCard
+                                        ? isReceived
+                                          ? "bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/20"
+                                          : "bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-300/30"
+                                        : isReceived
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-rose-100 text-rose-700"
+                                    }`}
+                                  >
                                     {isReceived ? "Received" : "Awaiting"}
                                   </span>
                                 </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {item.actions?.map((action) => {
-                                const selected = item.selectedAction === action.value
-                                return (
-                                  <button key={`${item.id}-${action.value}`} type="button" onClick={() => handleJourneyDetailAction(currentStep, group.label, item.id, action.value)}
-                                    className={selected ? (action.value === "received" ? "rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-700" : "rounded-full border border-rose-300 bg-rose-100 px-3 py-1 text-[11px] font-semibold text-rose-700") : "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100"}>
-                                    {action.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
+                                {"details" in item && Array.isArray(item.details) && item.details.length > 0 ? (
+                                  <div className={`mt-3 space-y-1.5 rounded-xl border p-3 ${isAgentZIntelligenceCard ? "border-white/10 bg-white/5" : "border-white/60 bg-white/70"}`}>
+                                    {item.details.map((detail, index) => (
+                                      <p
+                                        key={`${item.id}-detail-${index}`}
+                                        className={`text-xs leading-5 ${
+                                          agentZTriggerHeadlines.has(detail)
+                                            ? isAgentZIntelligenceCard
+                                              ? "inline-flex rounded-full bg-cyan-400/15 px-3 py-1 font-bold uppercase tracking-[0.18em] text-cyan-100 ring-1 ring-cyan-300/25"
+                                              : "inline-flex rounded-full bg-slate-900/5 px-3 py-1 font-bold uppercase tracking-wide text-slate-900"
+                                            : detail === "Property moves from C3 (single dwelling) -> C4 (small HMO)" ||
+                                              detail === "5 or more occupants"
+                                            ? isAgentZIntelligenceCard
+                                              ? "font-bold text-white"
+                                              : "font-semibold text-slate-900"
+                                            : isAgentZIntelligenceCard
+                                              ? "font-semibold text-slate-200"
+                                              : "font-semibold text-slate-700"
+                                        }`}
+                                      >
+                                        {detail === "New partitions or walls are added" ||
+                                        detail === "Fire doors are installed" ||
+                                        detail === "Loft conversion is involved" ||
+                                        detail === "New bathrooms or kitchens are added"
+                                          ? `• ${detail}`
+                                          : detail}
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : null}
                               </div>
                             )
                           })()
@@ -986,10 +1162,20 @@ export default function UserDetailsPage() {
                   {documentationItems.map((item) => (
                     <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-2 text-xs">
                       <span className="text-slate-700 font-medium">{item.label}</span>
-                      <span className={`font-semibold ${
-                        item.status === "Received" || item.status === "Provided" ? "text-emerald-700" : 
-                        item.status === "Missing" ? "text-rose-600" : "text-slate-500"
-                      }`}>{item.status}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold ${
+                          item.status === "Received" || item.status === "Provided" ? "text-emerald-700" : 
+                          item.status === "Awaiting Response" ? "text-rose-600" : "text-slate-500"
+                        }`}>{item.status}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleViewDocument(item)}
+                          className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          <Eye size={12} />
+                          View
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1031,10 +1217,20 @@ export default function UserDetailsPage() {
                     {complianceItems.filter(i => i.group === "Fire Safety").map(item => (
                        <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-1.5 mb-1">
                          <span className="text-slate-700">{item.label}</span>
-                         <span className={`font-semibold ${
-                           item.status === "Provided" || item.status === "Confirmed" || item.status === "Compliant" ? "text-emerald-700" : 
-                           item.status === "Missing" || item.status === "Unconfirmed" ? "text-rose-600" : "text-slate-500"
-                         }`}>{item.status}</span>
+                         <div className="flex items-center gap-2">
+                           <span className={`font-semibold ${
+                             item.status === "Provided" || item.status === "Confirmed" || item.status === "Compliant" ? "text-emerald-700" : 
+                             item.status === "Awaiting Response" || item.status === "Unconfirmed" ? "text-rose-600" : "text-slate-500"
+                           }`}>{item.status}</span>
+                           <button
+                             type="button"
+                             onClick={() => handleViewDocument(item)}
+                             className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                           >
+                             <Eye size={12} />
+                             View
+                           </button>
+                         </div>
                        </div>
                     ))}
                   </div>
@@ -1044,7 +1240,17 @@ export default function UserDetailsPage() {
                     {complianceItems.filter(i => i.group === "Amenities").map(item => (
                        <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-1.5 mb-1">
                          <span className="text-slate-700">{item.label}</span>
-                         <span className={`font-semibold ${item.status === "Pass" ? "text-emerald-700" : "text-amber-600"}`}>{item.status}</span>
+                         <div className="flex items-center gap-2">
+                           <span className={`font-semibold ${item.status === "Pass" ? "text-emerald-700" : "text-amber-600"}`}>{item.status}</span>
+                           <button
+                             type="button"
+                             onClick={() => handleViewDocument(item)}
+                             className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                           >
+                             <Eye size={12} />
+                             View
+                           </button>
+                         </div>
                        </div>
                     ))}
                   </div>
@@ -1054,10 +1260,20 @@ export default function UserDetailsPage() {
                     {complianceItems.filter(i => i.group === "Environmental").map(item => (
                        <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-1.5 mb-1">
                          <span className="text-slate-700">{item.label}</span>
-                         <span className={`font-semibold ${
-                           item.status === "Verified" || item.status === "Compliant" ? "text-emerald-700" : 
-                           item.status === "Unverified" ? "text-rose-600" : "text-slate-500"
-                         }`}>{item.status}</span>
+                         <div className="flex items-center gap-2">
+                           <span className={`font-semibold ${
+                             item.status === "Verified" || item.status === "Compliant" ? "text-emerald-700" : 
+                             item.status === "Unverified" ? "text-rose-600" : "text-slate-500"
+                           }`}>{item.status}</span>
+                           <button
+                             type="button"
+                             onClick={() => handleViewDocument(item)}
+                             className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                           >
+                             <Eye size={12} />
+                             View
+                           </button>
+                         </div>
                        </div>
                     ))}
                   </div>
@@ -1067,7 +1283,17 @@ export default function UserDetailsPage() {
                     {complianceItems.filter(i => i.group === "Space Standards").map(item => (
                        <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-1.5 mb-1">
                          <span className="text-slate-700">{item.label}</span>
-                         <span className={`font-semibold ${item.status === "Pass" ? "text-emerald-700" : "text-amber-600"}`}>{item.status}</span>
+                         <div className="flex items-center gap-2">
+                           <span className={`font-semibold ${item.status === "Pass" ? "text-emerald-700" : "text-amber-600"}`}>{item.status}</span>
+                           <button
+                             type="button"
+                             onClick={() => handleViewDocument(item)}
+                             className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                           >
+                             <Eye size={12} />
+                             View
+                           </button>
+                         </div>
                        </div>
                     ))}
                   </div>
@@ -1109,7 +1335,17 @@ export default function UserDetailsPage() {
                   {drawingItems.map((item) => (
                     <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-2 text-xs">
                       <span className="text-slate-700 font-medium">{item.label}</span>
-                      <span className={`font-semibold ${item.status === "Provided" ? "text-emerald-700" : "text-rose-600"}`}>{item.status}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold ${item.status === "Provided" ? "text-emerald-700" : "text-rose-600"}`}>{item.status}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleViewDocument(item)}
+                          className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          <Eye size={12} />
+                          View
+                        </button>
+                      </div>
                     </div>
                   ))}
                   
@@ -1117,10 +1353,20 @@ export default function UserDetailsPage() {
                   {drawingInputs.map((item) => (
                      <div key={item.label} className="flex items-center justify-between bg-white rounded-lg border px-3 py-2 text-xs">
                        <span className="text-slate-700 font-medium">{item.label}</span>
-                       <span className={`font-semibold ${
-                         item.status === "Complete" || item.status === "Available" || item.status === "Provided" ? "text-emerald-700" : 
-                         item.status === "Partial" ? "text-amber-600" : "text-rose-600"
-                       }`}>{item.status}</span>
+                       <div className="flex items-center gap-2">
+                         <span className={`font-semibold ${
+                           item.status === "Complete" || item.status === "Available" || item.status === "Provided" ? "text-emerald-700" : 
+                           item.status === "Partial" || item.status === "Pending Measurements" ? "text-amber-600" : "text-rose-600"
+                         }`}>{item.status}</span>
+                         <button
+                           type="button"
+                           onClick={() => handleViewDocument(item)}
+                           className="inline-flex items-center gap-1 rounded-md border bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                         >
+                           <Eye size={12} />
+                           View
+                         </button>
+                       </div>
                      </div>
                   ))}
                 </div>
@@ -1311,40 +1557,6 @@ export default function UserDetailsPage() {
                     <EligibilityDetailsCard eligibilityData={eligibilityData} loading={eligibilityLoading} projectId={projectId} viewMode={activeRoadmapStage?.id === "checklist" ? "checklist" : "eligibility"} />
                   </div>
                 )}
-                <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border p-5 mb-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div><h3 className="text-xl font-bold text-slate-900 mb-1">{project.title}</h3><p className="text-sm text-slate-600">{project.description}</p></div>
-                    <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">{project.status.replace(/_/g, " ")}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Project ID</p><p className="font-mono font-bold text-slate-900">{project.id}</p></div>
-                    <div><p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Service Type</p><p className="font-semibold text-slate-900 capitalize">{project.serviceType}</p></div>
-                  </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4 mb-6">
-                  <MetaBox icon={<MapPin size={14} className="text-rose-500" />} label="Location" value={project.location} />
-                  <MetaBox icon={<Building2 size={14} className="text-blue-500" />} label="Postcode" value={project.postcode} />
-                  <MetaBox icon={<Calendar size={14} className="text-emerald-500" />} label="Created" value={formatDateValue(project.createdDate)} />
-                  <MetaBox icon={<Calendar size={14} className="text-amber-500" />} label="Est. Completion" value={formatDateValue(project.estimatedCompletionDate)} />
-                </div>
-                <div className="space-y-3 mb-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-3">Project Team</h3>
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <TeamMember label="Agent X" name={project.agentX} />
-                    <TeamMember label="Agent Y" name={project.agentY} />
-                    <TeamMember label="Architect" name={project.architect} />
-                  </div>
-                </div>
-                <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <Building2 size={16} className="text-amber-600 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-amber-900 mb-1">Council Information</p>
-                      <p className="text-sm font-bold text-amber-900">{project.councilName}</p>
-                      <p className="text-xs text-amber-700 mt-1">Reference: {project.councilReference}</p>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -1598,6 +1810,98 @@ export default function UserDetailsPage() {
             <div className="px-6 py-4 border-t bg-slate-50 flex items-center justify-end gap-3">
               <button onClick={() => setViewingQuote(null)} className="rounded-lg px-4 py-2 text-sm font-semibold border bg-white hover:bg-slate-50 text-slate-700">Close</button>
               <button onClick={() => generateInvoicePDF(viewingQuote)} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white"><Download size={14} />Download PDF</button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewingDocument} onOpenChange={() => setViewingDocument(null)}>
+        <DialogContent className="max-w-xl p-0 overflow-hidden">
+          <div className="bg-white max-h-[92vh] flex flex-col">
+            <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <FileText size={18} className="text-blue-600" />
+                <DialogTitle className="text-lg font-bold text-slate-900">
+                  Document Preview
+                </DialogTitle>
+              </div>
+              <button
+                onClick={() => setViewingDocument(null)}
+                className="rounded-md p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {viewingDocument ? (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase text-slate-400">
+                      Document
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {viewingDocument.label}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase text-slate-400">
+                      Status
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {viewingDocument.status}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase text-slate-400">
+                      File Name
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {viewingDocument.fileName ?? "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase text-slate-400">
+                      File Type
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {viewingDocument.fileType ?? "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase text-slate-400">
+                      Source
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {viewingDocument.source ?? "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase text-slate-400">
+                      Uploaded At
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {viewingDocument.uploadedAt ?? "-"}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Workspace Note
+                  </p>
+                  <p className="mt-2 text-sm text-slate-700">
+                    {viewingDocument.note ??
+                      "This workspace currently has document metadata for this item. When a direct file link is available, the View action opens the document in a new tab."}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            <div className="px-6 py-4 border-t bg-slate-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setViewingDocument(null)}
+                className="rounded-lg px-4 py-2 text-sm font-semibold border bg-white hover:bg-slate-50 text-slate-700"
+              >
+                Close
+              </button>
             </div>
           </div>
         </DialogContent>

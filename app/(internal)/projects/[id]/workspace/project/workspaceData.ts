@@ -84,7 +84,7 @@ export const defaultWorkspaceRoadmap: WorkspaceRoadmapResponse = {
     },
     {
       id: "pending-documents-triggers",
-      label: "Pending Documents and Triggers",
+      label: "Triggers and Pending Documents",
       desc: "Track documents, compliance, drawings, and trigger follow-ups.",
       opensSection: "documents",
       queryStep: "pending-documents",
