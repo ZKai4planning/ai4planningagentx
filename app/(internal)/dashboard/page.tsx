@@ -97,6 +97,7 @@ type ProjectRow = {
   consultationDate: string
   consultationTime: string
   consultationTimestamp: number | null
+  consultationInitiatedBy: string
   consultant: string
   consultantTitle: string
 }
@@ -289,6 +290,24 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
       ["appointment", "consultantTitle"],
       ["schedule", "consultantTitle"],
     ]) ?? "Planning Consultant"
+  const consultationInitiatedByValue = getFirstStringValue(project, [
+      ["consultationInitiatedBy"],
+      ["initiatedBy"],
+      ["bookedBy"],
+      ["scheduledBy"],
+      ["consultation", "initiatedBy"],
+      ["consultation", "bookedBy"],
+      ["consultation", "scheduledBy"],
+      ["appointment", "initiatedBy"],
+      ["appointment", "bookedBy"],
+      ["appointment", "scheduledBy"],
+      ["schedule", "initiatedBy"],
+      ["schedule", "bookedBy"],
+      ["schedule", "scheduledBy"],
+    ])
+  const consultationInitiatedBy = consultationInitiatedByValue
+    ? formatConsultationInitiator(consultationInitiatedByValue)
+    : getDummyConsultationInitiator(project.projectId)
 
   return {
     id: project.projectId,
@@ -321,6 +340,7 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
           ? formatScheduleTime(consultationTimeValue)
           : "-",
     consultationTimestamp,
+    consultationInitiatedBy,
     consultant,
     consultantTitle,
   }
@@ -453,6 +473,43 @@ function getConsultationTimestamp(dateTimeValue?: string, dateValue?: string, ti
   return null
 }
 
+function getDummyConsultationInitiator(seed: string) {
+  let hash = 0
+
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash + seed.charCodeAt(index) * (index + 1)) % 997
+  }
+
+  return hash % 2 === 0 ? "Agent" : "Customer"
+}
+
+function formatConsultationInitiator(value?: string) {
+  if (!value) {
+    return "-"
+  }
+
+  const normalized = value.trim().toLowerCase()
+
+  if (!normalized) {
+    return "-"
+  }
+
+  if (["customer", "client", "user"].includes(normalized)) {
+    return "Customer"
+  }
+
+  if (["agent", "consultant", "advisor", "team", "staff", "admin"].includes(normalized)) {
+    return "Agent"
+  }
+
+  return value
+    .trim()
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
 function buildMockConsultationRows(projects: ProjectRow[]) {
   const mockConsultants = [
     { name: "Sarah", title: "Senior Planning Consultant" },
@@ -489,6 +546,7 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       consultationDate: "-",
       consultationTime: "-",
       consultationTimestamp: null,
+      consultationInitiatedBy: "Customer",
       consultant: "-",
       consultantTitle: "-",
     },
@@ -513,6 +571,7 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       consultationDate: "-",
       consultationTime: "-",
       consultationTimestamp: null,
+      consultationInitiatedBy: "Agent",
       consultant: "-",
       consultantTitle: "-",
     },
@@ -537,6 +596,7 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       consultationDate: "-",
       consultationTime: "-",
       consultationTimestamp: null,
+      consultationInitiatedBy: "Customer",
       consultant: "-",
       consultantTitle: "-",
     },
@@ -561,6 +621,7 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       consultationDate: "-",
       consultationTime: "-",
       consultationTimestamp: null,
+      consultationInitiatedBy: "Agent",
       consultant: "-",
       consultantTitle: "-",
     },
@@ -938,7 +999,7 @@ export default function DashboardPage() {
           <div className="rounded-3xl border bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Consultant schedule</h2>
+                <h2 className="text-xl font-semibold text-slate-900">Client Consultantation Schedule</h2>
                 <p className="text-sm text-slate-500">
                   Upcoming bookings appear first and the section keeps a minimum of 4 cards visible.
                 </p>
@@ -962,7 +1023,7 @@ export default function DashboardPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <h3 className="truncate text-base font-semibold text-slate-900">{project.customer}</h3>
-                          <p className="mt-1 truncate text-sm text-slate-500">{project.service}</p>
+                          <p className="mt-1 truncate text-sm text-slate-500">{project.subService}</p>
                         </div>
                         <span
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
@@ -987,6 +1048,13 @@ export default function DashboardPage() {
                         </div>
                         <div className="rounded-xl bg-white px-3 py-2.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Project
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-slate-900">{project.projectId}</p>
+                          <p className="mt-1 text-xs text-slate-500">{project.councilName}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Date
                           </p>
                           <div className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-900">
@@ -1003,24 +1071,20 @@ export default function DashboardPage() {
                             <span>{project.consultationTime !== "-" ? project.consultationTime : "Pending"}</span>
                           </div>
                         </div>
-                        <div className="rounded-xl bg-white px-3 py-2.5">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            Project
-                          </p>
-                          <p className="mt-1 text-sm font-medium text-slate-900">{project.projectId}</p>
-                          <p className="mt-1 text-xs text-slate-500">{project.councilName}</p>
-                        </div>
                       </div>
 
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
                         <div>
-                          <p>{project.subService}</p>
+                          {/* <p>{project.service}</p> */}
+                          <p className="text-xs font-medium text-slate-500">
+                            Initiated by {project.consultationInitiatedBy}
+                          </p>
                           <p className="mt-1">{project.stage}</p>
                         </div>
-                        <StatusBadge status={project.status} />
+                        {/* <StatusBadge status={project.status} /> */}
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      {/* <div className="mt-4 flex flex-wrap gap-2">
                         <Link
                           href={`/projects/${project.projectId}/workspace/project`}
                           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
@@ -1033,7 +1097,7 @@ export default function DashboardPage() {
                         >
                           Customer Chat
                         </Link>
-                      </div>
+                      </div> */}
                     </article>
                   )
                 })
