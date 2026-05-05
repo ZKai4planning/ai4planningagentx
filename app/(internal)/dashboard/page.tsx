@@ -1077,9 +1077,9 @@ export default function DashboardPage() {
                         <div>
                           {/* <p>{project.service}</p> */}
                           <p className="text-xs font-medium text-slate-500">
-                            Initiated by {project.consultationInitiatedBy}
+                            Consultation initiated by {project.consultationInitiatedBy}
                           </p>
-                          <p className="mt-1">{project.stage}</p>
+                          {/* <p className="mt-1">{project.stage}</p> */}
                         </div>
                         {/* <StatusBadge status={project.status} /> */}
                       </div>
