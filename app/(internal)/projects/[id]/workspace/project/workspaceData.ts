@@ -14,13 +14,11 @@ export type WorkspaceSectionId =
   | "consultation"
 
 export type WorkspaceStageId =
-  | "project-allocated"
+  | "checklist"
   | "eligibility-check"
-  | "project-handed-over-to-agent-y"
-  | "received-checklist"
-  | "quote-raised"
-  | "payment-received"
-  | "document-collection-review"
+  | "pending-documents-triggers"
+  | "payments-generate-quote"
+  | "final-review-check"
   | "council-submission"
 
 export type WorkspaceStageAction =
@@ -53,72 +51,80 @@ export interface WorkspaceRoadmapResponse {
 }
 
 export const defaultWorkspaceRoadmap: WorkspaceRoadmapResponse = {
-  currentStageId: "project-handed-over-to-agent-y",
+  currentStageId: "pending-documents-triggers",
   stages: [
     {
-      id: "project-allocated",
-      label: "Project Allocated",
-      desc: "Project allocated in workspace",
+      id: "checklist",
+      label: "SOP",
+       desc: "",
+     
       opensSection: "project",
-    },
-    {
-      id: "project-handed-over-to-agent-y",
-      label: "Project Handed Over to Agent Y",
-      desc: "Project handover initiated.",
-      opensSection: "project",
-      callout: "assign-agent-y",
-    },
-    {
-      id: "received-checklist",
-      label: "Received Checklist",
-      desc: "Current stage",
-      opensSection: "documents",
       queryStep: "checklist",
       action: {
         type: "activate-stage",
-        label: "Raise Quote",
-        targetStageId: "quote-raised",
-        targetSection: "quote",
+        label: "Open Eligibility Check",
+        targetStageId: "eligibility-check",
+        targetSection: "project",
       },
     },
     {
-      id: "quote-raised",
-      label: "Quote Raised",
-      desc: "Quote generated and shared",
-      opensSection: "quote",
-      queryStep: "quote",
+      id: "eligibility-check",
+      label: "Eligibility Check",
+      desc: "Review the eligibility form and confirm core project details.",
+      opensSection: "project",
+      queryStep: "eligibility",
       action: {
         type: "activate-stage",
-        label: "Mark 70% Payment Received",
-        targetStageId: "payment-received",
-        targetSection: "payments",
-      },
-    },
-    {
-      id: "payment-received",
-      label: "70% Payment Received",
-      desc: "Payment milestone completed",
-      opensSection: "payments",
-      queryStep: "payment",
-      action: {
-        type: "navigate",
-        label: "Open Documents",
-        hrefTemplate: "/projects/:projectId/workspace/agent-y-documents",
+        label: "Open Pending Documents",
+        targetStageId: "pending-documents-triggers",
         targetSection: "documents",
       },
     },
     {
-      id: "document-collection-review",
-      label: "Document Collection and Review",
-      desc: "Documents collected and reviewed",
+      id: "pending-documents-triggers",
+      label: "Pending Documents and Triggers",
+      desc: "Track documents, compliance, drawings, and trigger follow-ups.",
       opensSection: "documents",
-      queryStep: "documents",
+      queryStep: "pending-documents",
+      action: {
+        type: "activate-stage",
+        label: "Generate Quote",
+        targetStageId: "payments-generate-quote",
+        targetSection: "quote",
+      },
+    },
+    {
+      id: "payments-generate-quote",
+      label: "Payments (Generate a Quote)",
+      desc: "Prepare and share the project quote.",
+      opensSection: "quote",
+      queryStep: "payments",
+      action: {
+        type: "activate-stage",
+        label: "Start Final Review",
+        targetStageId: "final-review-check",
+        targetSection: "project",
+      },
+    },
+    {
+      id: "final-review-check",
+      label: "Final Review & Check",
+      desc: "Run the final review before council submission.",
+      opensSection: "project",
+      queryStep: "final-review",
+      action: {
+        type: "activate-stage",
+        label: "Open Council Submission",
+        targetStageId: "council-submission",
+        targetSection: "submission",
+      },
     },
     {
       id: "council-submission",
       label: "Council Submission",
-      desc: "Final stage",
+      desc: "Prepare the final council submission pack.",
       opensSection: "submission",
+      queryStep: "submission",
     },
   ],
 }

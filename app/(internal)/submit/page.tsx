@@ -220,7 +220,7 @@ export default function UserDetailsPage() {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Customer ID · <span className="font-mono">{id ?? "CUST-4421"}</span>
+              {/* Customer ID · <span className="font-mono">{id ?? "CUST-4421"}</span> */}
               <span className="mx-2">·</span>
               {project.service}
               <span className="mx-2">·</span>

@@ -152,7 +152,7 @@ export default function ProjectDetailsPage() {
           <Card title="Project Overview" icon={<Building2 size={15} />}>
             <Meta label="Stage" value={project.stage} />
             <Meta label="Timeline" value={project.timeline} />
-            <Meta label="Customer ID" value={customer.id} />
+            {/* <Meta label="Customer ID" value={customer.id} /> */}
           </Card>
 
           {/* PAYMENT – ONLY AFTER INITIAL PAYMENT */}

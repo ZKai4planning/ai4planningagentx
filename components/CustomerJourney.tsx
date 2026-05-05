@@ -15,6 +15,22 @@ export type JourneyStep = {
   desc: string
   details?: string[]
   detailsLabel?: string
+  detailGroups?: {
+    label: string
+    variant?: "chips" | "cards"
+    items: (
+      | string
+      | {
+          id: string
+          label: string
+          selectedAction?: string
+          actions?: {
+            label: string
+            value: string
+          }[]
+        }
+    )[]
+  }[]
   calloutTypewriterText?: string
   calloutStyle?: "default" | "eligibility"
   hideNextLabel?: boolean
@@ -27,6 +43,12 @@ type CustomerJourneyProps = {
   advanceLabel?: string
   onAdvance?: () => void
   onStepSelect?: (index: number) => void
+  onDetailAction?: (
+    stepIndex: number,
+    groupLabel: string,
+    itemId: string,
+    actionValue: string
+  ) => void
   notificationSlot?: React.ReactNode
   calloutActions?: React.ReactNode
 }
@@ -38,6 +60,7 @@ export default function CustomerJourney({
   advanceLabel = "Advance",
   onAdvance,
   onStepSelect,
+  onDetailAction,
   notificationSlot,
   calloutActions,
 }: CustomerJourneyProps) {
@@ -228,7 +251,117 @@ export default function CustomerJourney({
                   </button>
                 ) : null}
 
-                {activeStep?.details?.length ? (
+                {activeStep?.detailGroups?.length ? (
+                  <div className="mt-3 space-y-3">
+                    {activeStep.detailGroups.map((group) =>
+                      group.items.length > 0 ? (
+                        <div
+                          key={group.label}
+                          className={
+                            isEligibilityCallout
+                              ? "rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
+                              : "rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4"
+                          }
+                        >
+                          <p
+                            className={
+                              isEligibilityCallout
+                                ? "mb-2 text-xs font-semibold text-slate-300"
+                                : "mb-2 text-xs font-semibold text-slate-500"
+                            }
+                          >
+                            {group.label}
+                          </p>
+                          {group.variant === "cards" ? (
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                              {group.items.map((item) =>
+                                typeof item === "string" ? (
+                                  <div
+                                    key={`${group.label}-${item}`}
+                                    className={
+                                      isEligibilityCallout
+                                        ? "rounded-2xl border border-cyan-400/20 bg-white/10 px-3 py-3 text-sm font-medium text-cyan-100"
+                                        : "rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700"
+                                    }
+                                  >
+                                    {item}
+                                  </div>
+                                ) : (
+                                  <div
+                                    key={`${group.label}-${item.id}`}
+                                    className={
+                                      isEligibilityCallout
+                                        ? "rounded-2xl border border-cyan-400/20 bg-white/10 px-3 py-3"
+                                        : "rounded-2xl border border-slate-200 bg-white px-3 py-3"
+                                    }
+                                  >
+                                    <p
+                                      className={
+                                        isEligibilityCallout
+                                          ? "text-sm font-semibold text-white"
+                                          : "text-sm font-semibold text-slate-900"
+                                      }
+                                    >
+                                      {item.label}
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {item.actions?.map((action) => {
+                                        const selected = item.selectedAction === action.value
+
+                                        return (
+                                          <button
+                                            key={`${item.id}-${action.value}`}
+                                            type="button"
+                                            onClick={() =>
+                                              onDetailAction?.(
+                                                currentStep,
+                                                group.label,
+                                                item.id,
+                                                action.value
+                                              )
+                                            }
+                                            className={
+                                              selected
+                                                ? isEligibilityCallout
+                                                  ? "rounded-full border border-cyan-300 bg-cyan-300/20 px-3 py-1 text-[11px] font-semibold text-cyan-100"
+                                                  : "rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700"
+                                                : isEligibilityCallout
+                                                ? "rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10"
+                                                : "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100"
+                                            }
+                                          >
+                                            {action.label}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {group.items.map((item) => (
+                                <span
+                                  key={`${group.label}-${typeof item === "string" ? item : item.id}`}
+                                  className={
+                                    isEligibilityCallout
+                                      ? "rounded-full border border-cyan-400/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-100"
+                                      : "rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700"
+                                  }
+                                >
+                                  {typeof item === "string" ? item : item.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                ) : null}
+
+                {!activeStep?.detailGroups?.length && activeStep?.details?.length ? (
                   <div className="mt-3">
                     <p
                       className={

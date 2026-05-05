@@ -108,6 +108,7 @@ type AgentZPlaybookEntry = {
   title: string
   description: string
   questionHelp?: string
+  smartResponse?: string[]
   customerOptions?: string[]
   agentXResponses?: string[]
   uploadSupportPrompt?: string
@@ -142,6 +143,7 @@ type EligibilityDetailsCardProps = {
   loading: boolean
   projectId?: string
   projectServiceName?: string
+  viewMode?: "checklist" | "eligibility"
 }
 
 const STEP_ONE_SECTIONS: DetailedSection[] = [
@@ -297,6 +299,105 @@ const STEP_ONE_SECTIONS: DetailedSection[] = [
     ],
   },
 ]
+
+export const CHECKLIST_DOCUMENTS = [
+  "Gas Safety Certificate (CP12) - issued within last 12 months",
+  "Electrical Report (EICR) - issued within last 5 years",
+  "Energy Performance Certificate (EPC) - rating E or above",
+  "Fire Risk Assessment (if applicable)",
+  "Proof of ownership (Title Register)",
+  "Leaseholder consent (if leasehold)",
+  "Mortgage lender consent (if mortgaged)",
+  "Tenancy agreements (if tenants already in place)",
+  "Management plan (waste, maintenance, complaints)",
+  "Fit & Proper Person declaration",
+  "Any existing planning permissions or certificates",
+] as const
+
+export const CHECKLIST_COMPLIANCE = [
+  "Interlinked smoke alarms on every floor",
+  "Heat alarm in kitchen",
+  "Fire doors (FD30) with closers",
+  "Safe escape routes",
+  "Adequate kitchen facilities (size, appliances, layout)",
+  "Bathroom-to-occupant ratio compliant",
+  "Adequate heating and ventilation",
+  "Safe water supply",
+  "Proper sewage and surface water drainage",
+  "Correct Newham bins (general, recycling, food waste)",
+  "No damp, mould, or structural hazards",
+  "Bedrooms meet minimum size standards",
+  "Communal spaces meet Newham requirements",
+] as const
+
+export const CHECKLIST_DRAWINGS = [
+  "Existing floor plans (to scale)",
+  "Proposed floor plans (to scale)",
+  "Room dimensions clearly marked",
+  "Fire safety plan (alarms, fire doors, escape routes)",
+  "Existing and proposed elevations (for planning)",
+  "Location plan (1:1250)",
+  "Block/site plan",
+  "Section drawings (if structural changes)",
+] as const
+
+const AGENT_Z_WORKFLOW_STEPS = [
+  {
+    title: "Step 1 - Collect & Verify Documentation",
+    items: [
+      "Request all required certificates (CP12, EICR, EPC).",
+      "Request ownership, leaseholder, and lender consents.",
+      "Request tenancy agreements if applicable.",
+      "Request management plan and Fit & Proper declaration.",
+      "Upload and tag documents in the briefcase.",
+      "Flag missing documents for follow-up.",
+    ],
+  },
+  {
+    title: "Step 2 - Trigger Compliance Checks",
+    items: [
+      "Fire Safety: verify alarms, fire doors, and escape routes. Request photos or certificates. If unclear, trigger a fire-safety site visit.",
+      "Amenities: verify kitchen size, appliances, and bathroom ratios. Request photos or measurements. If the customer is unsure, trigger a measured survey.",
+      "Environmental: verify water supply, drainage, and waste arrangements. Request photos of taps, drainage, and bins. If unclear, trigger a drainage or waste site visit.",
+      "Space Standards: verify bedroom sizes and communal areas. If dimensions are missing, trigger a measured survey.",
+    ],
+  },
+  {
+    title: "Step 3 - Drawings Workflow",
+    items: [
+      "Request existing floor plans.",
+      "If the customer has no drawings, trigger a measured survey.",
+      "Once the survey is uploaded, send the redacted pack to Agent Y for drawing production.",
+      "Ensure the fire safety plan is included.",
+    ],
+  },
+  {
+    title: "Step 4 - Planning Permission Workflow",
+    items: [
+      "Identify whether planning is required (C3 to C4 or Sui Generis).",
+      "Check for structural changes, extensions, and loft conversions.",
+      "Request any existing planning documents.",
+      "If unclear, trigger planning classification review.",
+      "Prepare the planning pack for Agent Y.",
+    ],
+  },
+  {
+    title: "Step 5 - Redacted Packet to Agent Y",
+    items: [
+      "Pass a clean, non-personal summary covering property type, required documents received or missing, compliance status, drawing requirements, planning requirements, site visit status, and any risks or red flags.",
+      "Agent Y then produces technical drawings, compliance notes, planning documents, and the final submission pack.",
+    ],
+  },
+  {
+    title: "Step 6 - Customer Updates",
+    items: [
+      "Keep the customer informed of missing items.",
+      "Provide booking links for surveys.",
+      "Provide cost estimates where required.",
+      "Confirm when the case is ready for submission.",
+    ],
+  },
+] as const
 
 const STEP_TWO_SECTIONS: DetailedSection[] = [
   {
@@ -861,6 +962,13 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z helps interpret which property type best matches the building before downstream planning advice is framed.",
     questionHelp:
       "Use this when the customer is not sure whether the site is best described as a house, flat, converted building, or something less standard.",
+    smartResponse: [
+      "No problem, I can help you identify this.",
+      "A terraced house is part of a row of similar houses sharing side walls.",
+      "A semi-detached house is attached to one other house.",
+      "A detached house stands alone.",
+      "A flat or maisonette is part of a building with shared or separate access.",
+    ],
     customerOptions: [
       "House / dwelling",
       "Flat / maisonette",
@@ -868,9 +976,9 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Other / Ask Agent Z",
     ],
     agentXResponses: [
-      "Explain the closest matching property type based on the saved layout and current use answers.",
-      "Ask one short clarifying question if the building form is still ambiguous.",
-      "Recommend 'Other / Ask Agent Z' only when the property does not cleanly fit the standard types.",
+      "Property Type: Terraced. Confidence: high or medium if AI-guided. Actions: proceed with the standard HMO workflow, assume shared walls for neighbour-impact review, prioritise fire-escape compliance, and check likely rear-only extension constraints.",
+      "If the type was selected through an unsure path, flag it as Property Type AI-Inferred and verify it during document review or the floor-plan stage.",
+      "Use the clarified building form to choose the cleanest planning and compliance route before the case moves forward.",
     ],
     insights: [
       "Property type changes how later HMO and planning answers are interpreted.",
@@ -889,6 +997,13 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z helps explain which ownership position best reflects the customer so the application route stays consistent.",
     questionHelp:
       "This question is about whether the customer owns, jointly owns, manages, or otherwise controls the site well enough to apply.",
+    smartResponse: [
+      "No worries, I'll help you figure this out.",
+      "If you own the property and the land it stands on, you are a freeholder.",
+      "If you own the property but not the land (usually in flats), you are a leaseholder.",
+      "If the property is owned by a company, select company-owned.",
+      "If you're renting or managing on behalf of someone else, select tenant or acting on behalf of owner.",
+    ],
     customerOptions: [
       "Owner occupier",
       "Landlord / owner",
@@ -896,9 +1011,9 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Unsure who should be selected",
     ],
     agentXResponses: [
-      "Clarify whether the customer owns the site directly or is acting on behalf of someone else.",
-      "Recommend the ownership status that best matches the signatory and certificate answers.",
-      "Flag when the ownership answer should be checked again before submission.",
+      "Ownership: Leasehold. Confidence: high. Actions: request freeholder consent, check whether the lease permits HMO use, flag the legal dependency, and do not proceed to submission without consent.",
+      "If the answer is AI-assisted or still unsure, treat it as likely leasehold with medium confidence and request title deed, land registry, or other ownership evidence from the client.",
+      "If the customer is a tenant, do not proceed independently: request landlord authorization and pause the workflow until owner approval is in place.",
     ],
     insights: [
       "Ownership answers should stay consistent with the later certificate and declaration section.",
@@ -917,6 +1032,14 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help interpret whether the selected works change the planning or HMO route.",
     questionHelp:
       "This is the first place to confirm whether the project is a use change only, physical works, or both.",
+    smartResponse: [
+      "That's absolutely fine, I'll help you understand.",
+      "Building works include any physical changes to your property such as:",
+      "Extending the property (rear or side)",
+      "Converting loft or garage",
+      "Moving or removing walls",
+      "Adding bedrooms or bathrooms",
+    ],
     customerOptions: [
       "Rear, side, loft, or internal works",
       "Use change with little or no building work",
@@ -924,9 +1047,9 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Unsure / Ask Agent Z",
     ],
     agentXResponses: [
-      "Summarise the likely work category from the customer's earlier answers.",
-      "Explain whether the answer suggests plans and dimensions will be needed next.",
-      "Use Agent Z when the customer is mixing use-change and building-work language together.",
+      "Building Works: Rear Extension plus Internal Changes. Actions: trigger planning assessment, request architectural drawings, assign the drawings brief, check neighbour impact, and review fire-safety implications.",
+      "If there are no building works, proceed with the existing-layout review, focus on compliance and licensing, and avoid requesting planning drawings at the initial stage.",
+      "If the answer is unsure, treat it as likely internal changes with medium confidence, clarify it during consultation, request a basic layout or photos, and keep the planning check open.",
     ],
     insights: [
       "The work type can change what plans, measurements, and supporting evidence are needed next.",
@@ -945,11 +1068,19 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can flag how existing extensions may affect available rights, precedent, and future works expectations.",
     questionHelp:
       "Use this when the customer is not sure whether earlier extensions, loft works, or outbuildings already count against the site history.",
+    smartResponse: [
+      "That's quite common, I can help.",
+      "A property is considered extended if any additional space has been added beyond the original structure, such as:",
+      "A rear or side extension",
+      "A loft conversion with dormer",
+      "A conservatory",
+      "Any structural addition visible from outside",
+    ],
     customerOptions: ["Yes", "No", "Unsure / Ask Agent Z"],
     agentXResponses: [
-      "Explain why previous works on site matter before the new proposal is assessed.",
-      "Suggest checking old approvals, drawings, or sale particulars if the history is unclear.",
-      "Flag the answer for follow-up when the site history could change feasibility.",
+      "Previous Extensions: Rear Extension. Actions: trigger a planning-constraint review, check permitted-development limits, request existing and proposed drawings, compare against neighbouring properties, and flag moderate planning risk.",
+      "If there are multiple extensions, mark the case as high planning sensitivity, assume a full planning route is likely, require detailed drawings, and escalate for expert review.",
+      "If the extension history is unknown, request site photos or floor plans, verify through council records if needed, and keep planning status open.",
     ],
     insights: [
       "Historic extensions can reduce the headroom for new development.",
@@ -968,11 +1099,17 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help interpret whether the proposed setup behaves more like a shared HMO arrangement.",
     questionHelp:
       "This question is about whether occupants will rely on shared amenities instead of fully self-contained facilities.",
+    smartResponse: [
+      "No problem, I'll help clarify.",
+      "In an HMO:",
+      "Shared facilities mean tenants use the same kitchen or bathroom.",
+      "Self-contained units mean each tenant has their own kitchen and bathroom.",
+    ],
     customerOptions: ["Yes", "No", "Don't know / Ask Agent Z"],
     agentXResponses: [
-      "Explain how shared facilities can indicate a more typical HMO arrangement.",
-      "Ask whether the kitchen and bathroom are shared by separate occupiers or one household.",
-      "Recommend Agent Z when the customer is unsure how the rooms will operate in practice.",
+      "Facility Type: Shared Kitchen plus Bathroom. Actions: confirm HMO classification, trigger the licensing workflow, apply standard HMO room and kitchen ratios, and proceed with compliance checks.",
+      "If the layout is shared kitchen with private bathrooms, maintain HMO classification, adjust bathroom-ratio requirements, and highlight the stronger premium-style layout.",
+      "If the property is fully self-contained, treat it as non-standard for a typical C4 HMO, trigger a planning review, and escalate for planning strategy. If unsure, request the layout or floor plan and keep classification open.",
     ],
     insights: [
       "Shared kitchen and bathroom arrangements often affect HMO classification and amenity review.",
@@ -991,11 +1128,17 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can assess whether the occupancy model suggests a clearer HMO use pattern.",
     questionHelp:
       "This is about whether occupants will rent separate bedrooms individually rather than occupy the whole property together.",
+    smartResponse: [
+      "No problem, I'll help clarify.",
+      "This is a key trigger for HMO classification and licensing intent. It helps confirm whether the property operates as a true HMO (room-by-room letting) versus a single tenancy.",
+      "Renting rooms individually means each tenant has their own agreement and rents a separate room.",
+      "Letting the property as a whole means one household (family or group) rents the entire property under a single agreement.",
+    ],
     customerOptions: ["Yes", "No", "Don't know / Ask Agent Z"],
     agentXResponses: [
-      "Explain why separate room lets are a strong signal for HMO-style occupation.",
-      "Check whether the proposed occupant count and kitchen-sharing answers still match.",
-      "Use Agent Z when the customer has not decided the final letting model yet.",
+      "Letting Type: Individual Rooms. Actions: confirm HMO classification, trigger the licensing workflow, apply room-level compliance checks, and validate occupancy against room sizes.",
+      "If the whole property is let under a single tenancy, assume no HMO licence is needed initially, verify the number of occupants, and check whether planning is still required if works are involved.",
+      "If the letting model is mixed or unclear, request tenancy details, explain the HMO implications, escalate for compliance review, and keep classification open until clarified.",
     ],
     insights: [
       "Individual room rental is a strong signal for HMO-related review.",
@@ -1014,11 +1157,17 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help interpret whether the property layout supports a communal kitchen arrangement.",
     questionHelp:
       "Use this when the customer is planning a new communal kitchen or is not sure whether the proposed room arrangement qualifies as one.",
+    smartResponse: [
+      "No problem, I'll help clarify.",
+      "A communal kitchen is a shared space where all or multiple tenants prepare and cook food.",
+      "If each room has its own private kitchen, then it's not communal and may be considered self-contained units instead.",
+      "Do your tenants use one shared kitchen, or does each have their own cooking space?",
+    ],
     customerOptions: ["Yes", "No", "Planning to create one / Ask Agent Z can help you"],
     agentXResponses: [
-      "Explain how a communal kitchen affects the practical HMO layout review.",
-      "Suggest checking whether bedroom count, bathrooms, and shared-use answers still fit together.",
-      "Use Agent Z when the customer is proposing a layout change rather than describing the current one.",
+      "Kitchen Type: Single Communal. Actions: trigger a kitchen-adequacy check, validate occupants against kitchen size, ensure appliance standards are met, and proceed with standard HMO compliance review.",
+      "If there are multiple communal kitchens, distribute occupants across the kitchens, improve the compliance picture, and consider whether higher occupancy approval becomes more realistic.",
+      "If there is no communal kitchen, treat the case as a non-standard HMO or possible self-contained-unit model, trigger planning-classification review, and escalate to planning strategy. If unsure, request a floor plan or photos and keep classification open.",
     ],
     insights: [
       "Communal kitchens often link directly to occupancy strategy and amenity expectations.",
@@ -1064,11 +1213,19 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z helps explain how to describe the external wall material when the customer has not decided yet.",
     questionHelp:
       "This question usually refers to the visible external finish for the proposed works, such as brick, render, cladding, or a matching finish.",
+    smartResponse: [
+      "That's absolutely fine, I can guide you.",
+      "The type of wall you choose is important for fire safety, sound insulation, and HMO compliance.",
+      "Brick or block walls are strong and durable, but less flexible.",
+      "Stud walls are common for internal layouts and quicker to install.",
+      "Fire-rated walls are often required in HMOs for safety and compliance.",
+      "Are you planning to create new rooms or modify the layout?",
+    ],
     customerOptions: ["Brick", "Render / cladding", "Match existing", "Not decided / Ask Agent Z"],
     agentXResponses: [
-      "Suggest a simple material description based on the existing property and proposed works.",
-      "Explain when 'match existing' is the safest answer to use at this stage.",
-      "Flag when elevations or site photos would help confirm the finish.",
+      "Wall Material: Fire-Rated Partitions. Actions: meets HMO fire compliance, proceed without escalation, and align with building regulations.",
+      "Wall Material: Standard Stud. Actions: advise fire-rated specification, flag compliance risk, and require an upgraded HMO-ready wall standard.",
+      "If the wall material is existing or not yet defined, run a fire-safety assessment, check door and escape-route compliance, and hold design finalisation until the specification is clear.",
     ],
     insights: [
       "Material descriptions are often reviewed together with elevations and photographs.",
@@ -1087,11 +1244,18 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z helps interpret the likely roof finish when the customer is still deciding how the proposal should look.",
     questionHelp:
       "This usually means the roof covering for new or altered roof areas, for example tile, slate, flat roof membrane, or matching existing.",
+    smartResponse: [
+      "No problem, I'll guide you.",
+      "The choice of roof material depends on the type of work you're planning.",
+      "Tiles or slate are common for pitched roofs and help maintain the look of the property.",
+      "Flat-roof materials like felt or GRP are typically used for rear extensions.",
+      "GRP or fibreglass is durable and low maintenance for modern extensions.",
+    ],
     customerOptions: ["Tile / slate", "Flat roof material", "Match existing", "Not decided / Ask Agent Z"],
     agentXResponses: [
-      "Suggest a concise roof-material answer that fits the visible roof change being proposed.",
-      "Explain when matching the existing roof is usually the simplest route.",
-      "Recommend a follow-up only if the roof design is materially different or still unclear.",
+      "Roof Material: Existing. Actions: no immediate action, but verify if a loft conversion is planned later.",
+      "Roof Material: Tile or Slate. Actions: ensure it matches the existing structure, check planning aesthetic compliance, and proceed with standard validation.",
+      "Roof Material: Flat roof or not defined. Actions: validate extension height and drainage design, align with building regulations, and coordinate with Agent Y if the final roof finish is still undecided.",
     ],
     insights: [
       "Roof materials matter most when the proposed works alter the visible roof form.",
@@ -1110,11 +1274,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help explain why matching or contrasting materials may matter in review.",
     questionHelp:
       "This question is asking whether the proposed walls, roof, and visible finishes will broadly continue the existing appearance of the property.",
+    smartResponse: [
+      "That's a great question, I can help.",
+      "In most cases, councils prefer new work to match the existing property, especially for brickwork, roof tiles, and external finishes.",
+      "This helps the extension or alteration blend in with the original building.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain whether the current design intent sounds like a matching or contrasting approach.",
-      "Suggest a short justification if the proposed material palette will differ.",
-      "Recommend checking elevations and photographs before finalising the answer.",
+      "Material Match: Yes. Actions: proceed with a planning-friendly design, increase approval probability, and continue with the standard workflow.",
+      "Material Match: No. Actions: flag planning risk, prepare design justification, trigger a fuller planning route, and coordinate visuals with Agent Y.",
+      "If the answer is partial or not decided, review design consistency, flag moderate planning sensitivity, and recommend matching materials until the final design is confirmed.",
     ],
     insights: [
       "Material consistency can affect planning acceptability and visual integration.",
@@ -1258,11 +1427,17 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can interpret whether heritage context is likely to change the review route.",
     questionHelp:
       "This question is about whether the property is in a conservation area or close enough to a listed building that design sensitivity may increase.",
+    smartResponse: [
+      "No problem, I can help you check this.",
+      "A conservation area is a location where the council protects the character and appearance of buildings.",
+      "A listed building is officially recognised as historically important and has strict rules for any changes.",
+      "If your property is in one of these areas, even small changes may require planning permission.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain why heritage context may increase the need for drawings and materials clarity.",
-      "Suggest checking the council map or listing context if the customer is unsure.",
-      "Flag the case for a more cautious design review if heritage sensitivity is likely.",
+      "Constraint: Conservation Area. Actions: assume full planning is likely, enforce material matching, restrict design flexibility, assign experienced planning review, and increase scrutiny.",
+      "Constraint: Listed Building Proximity or mixed heritage sensitivity. Actions: review visual impact, prepare justification if needed, and escalate to a more specialist planning route if both triggers apply.",
+      "If there are no constraints, proceed with the standard workflow. If unsure, trigger postcode or mapping validation and do not treat the heritage status as confirmed yet.",
     ],
     insights: [
       "Heritage context can raise the bar for visual detail and supporting evidence.",
@@ -1281,11 +1456,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can assess whether nearby trees are likely to create a more sensitive review path.",
     questionHelp:
       "This is about whether large trees are close enough to the works that falling distance, root protection, or arboricultural review could matter.",
+    smartResponse: [
+      "No problem, I'll help you assess this.",
+      "Trees can matter in planning, especially if they are large or mature, close to the proposed extension, or protected by a Tree Preservation Order.",
+      "A simple way to think about it is this: if a tree is tall enough that it could potentially fall onto the proposed structure, it may be relevant.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain why trees close to the works can trigger extra tree-related review.",
-      "Suggest checking approximate distance, species, and height if the answer is uncertain.",
-      "Recommend whether a tree report follow-up is likely to help.",
+      "Tree Impact: Yes. Actions: trigger the tree-constraint workflow, check TPO status, request a tree survey if required, adjust design positioning, and warn the customer about possible delay.",
+      "Tree Impact: No. Actions: proceed with the standard workflow and keep environmental restriction low.",
+      "If tree risk is unknown, trigger an environmental check, request site photos, and consider a site visit before treating the case as clear.",
     ],
     insights: [
       "Trees near the works can drive the need for extra arboricultural review.",
@@ -1304,11 +1484,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can explain when a BS5837-style report is likely to help or be expected.",
     questionHelp:
       "A tree report is usually most relevant where protected trees, nearby mature trees, or root protection areas may be affected by the works.",
+    smartResponse: [
+      "No problem, I'll explain.",
+      "An Arboricultural Report, often called a BS5837 report, assesses tree location and condition, the impact of your development on trees, and protection measures during construction.",
+      "This is usually required when there are trees near the development, trees are protected, or the council flags tree constraints.",
+    ],
     customerOptions: ["Yes, open Agent Z support", "No, not right now"],
     agentXResponses: [
-      "Explain whether the site answers suggest a tree report is worth considering now.",
-      "Clarify what a BS5837 or arboriculture report is typically used for.",
-      "Recommend whether the team should request, defer, or simply flag the report.",
+      "Arboriculture Report: Available. Actions: attach it to the documentation briefcase, proceed with planning submission readiness, and reduce approval risk.",
+      "Arboriculture Report: Not available where trees are present. Actions: treat it as a mandatory requirement, assign an arboricultural consultant, schedule the tree survey, and hold submission until the report is received.",
+      "If the report is not required or the position is still unclear, verify the tree constraint first, request clarification, and keep the workflow conditional until confirmed.",
     ],
     uploadSupportPrompt:
       "Agent can help. No tree report uploaded yet. Would you like Agent Z to explain whether an Arboriculture / BS5837 report is likely to be needed?",
@@ -1329,11 +1514,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help interpret whether the flood answer is likely to raise additional evidence needs.",
     questionHelp:
       "Use this when the customer is unsure whether the site falls within Flood Zone 2 or 3 and what that means for planning evidence.",
+    smartResponse: [
+      "No problem, I can check this for you.",
+      "Flood Zones are usually defined as Zone 1 for low risk, Zone 2 for medium risk, and Zone 3 for high risk.",
+      "If your property is in Zone 2 or 3, the council may require a Flood Risk Assessment before approval.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain that the flood-zone answer is mainly a routing question for later evidence.",
-      "Suggest checking flood mapping or council guidance if the customer is unsure.",
-      "Recommend whether the FRA upload question should be treated as a likely next step.",
+      "Flood Zone: 3. Actions: treat an FRA as mandatory, assign a flood-risk consultant, adjust the design for levels and drainage, and hold submission until the report is ready.",
+      "Flood Zone: 2. Actions: assess the project type, decide whether an FRA is needed, and monitor planning sensitivity closely.",
+      "Flood Zone: 1 or unknown. Actions: proceed with the standard workflow for Zone 1, but if the answer is unclear, trigger a flood check before moving ahead.",
     ],
     insights: [
       "Flood risk answers are often routing questions rather than final decisions.",
@@ -1352,11 +1542,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help frame whether contamination concerns need a stronger follow-up.",
     questionHelp:
       "This question is about known site-history issues, former uses, or local information that could suggest contamination risk.",
+    smartResponse: [
+      "No problem, I'll help clarify.",
+      "Contamination usually relates to past uses of land that may have left harmful substances in the ground, such as old industrial use, petrol stations, waste disposal, or chemical storage.",
+      "If the property has always been residential, contamination is usually less likely.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain that this is a risk-flagging question rather than a final technical assessment.",
-      "Ask whether the customer knows any previous industrial or unusual site history.",
-      "Recommend cautious follow-up when the answer is uncertain instead of confidently guessing.",
+      "Contamination: Yes. Actions: trigger the environmental workflow, assign an environmental consultant, order a Phase 1 report, hold submission until cleared, and inform the customer about risk and timeline.",
+      "Contamination: No. Actions: proceed with the standard workflow and keep environmental restriction low.",
+      "If contamination is unknown, check land-history records, recommend environmental screening, and keep submission conditional until the risk picture is clearer.",
     ],
     insights: [
       "Contamination answers usually matter most when the customer is uncertain rather than definite.",
@@ -1375,11 +1570,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can explain when an FRA is likely to matter and what role it plays in review.",
     questionHelp:
       "An FRA is usually considered when flood-zone answers already suggest the site may need more formal flood evidence.",
+    smartResponse: [
+      "No problem, I'll explain.",
+      "A Flood Risk Assessment, or FRA, evaluates flood risk to the property, the impact of the development, and drainage or mitigation measures.",
+      "It is usually required if the property is in Flood Zone 2 or 3.",
+    ],
     customerOptions: ["Yes, open Agent Z support", "No, not right now"],
     agentXResponses: [
-      "Explain whether the current flood answers make an FRA likely or just possible.",
-      "Clarify whether this should be requested now or held as a later follow-up.",
-      "Help draft a simple next-step message to the customer if the report is probably needed.",
+      "Flood Risk Assessment: Available. Actions: attach it to the documentation briefcase, proceed with submission readiness, and reduce planning risk.",
+      "Flood Risk Assessment: Not available in Zone 2 or 3. Actions: treat it as a mandatory requirement, assign a flood-risk consultant, initiate FRA preparation, and hold submission until the report is received.",
+      "If the FRA is not required or the need is still unclear, cross-check the flood zone, request clarification, and keep the workflow conditional.",
     ],
     uploadSupportPrompt:
       "Agent can help. No Flood Risk Assessment uploaded yet. Would you like Agent Z to explain whether the site is likely to need one?",
@@ -1400,11 +1600,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can explain why this answer matters in the wider safety and HMO context.",
     questionHelp:
       "This is about whether basic smoke alarm provision is already in place, not a full technical fire strategy.",
+    smartResponse: [
+      "No problem, I can help with this.",
+      "For Newham-style HMO compliance, smoke alarms are normally expected on every storey, with a heat alarm in the kitchen.",
+      "They are usually expected to be mains-wired with battery backup and aligned with Grade D standards.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain that the answer is a quick readiness signal rather than the full compliance outcome.",
-      "Suggest that missing alarms may lead to follow-up safety actions later.",
-      "Use Agent Z when the customer is unsure what is already installed.",
+      "If alarms are installed, request photos, ask whether they are interlinked, request any fire-safety certificate if available, and update the briefcase as verification pending.",
+      "If alarms are missing, explain they are required before approval, offer a fire-safety upgrade route, and mark the briefcase as a compliance upgrade requirement.",
+      "If the status is unclear, request ceiling and hallway photos, trigger a fire-safety survey if needed, and keep the alarm status as awaiting verification.",
     ],
     insights: [
       "Safety questions often work best when read as a compliance cluster rather than in isolation.",
@@ -1423,11 +1628,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help decide how this certificate affects the next compliance follow-up.",
     questionHelp:
       "This is asking whether a current and valid Gas Safety Certificate exists for the property.",
+    smartResponse: [
+      "No problem, I can help with that.",
+      "A valid Gas Safety Certificate, often called a CP12, is usually required where the property has a gas boiler, cooker, fire, or any other gas appliance.",
+      "It should normally be issued within the last 12 months by a Gas Safe registered engineer.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain that a valid certificate strengthens the compliance picture.",
-      "Recommend whether the customer should be asked to upload or confirm the certificate next.",
-      "Use Agent Z to prioritise the follow-up if several compliance documents are missing.",
+      "If the certificate exists, request CP12 upload, verify the issue date, engineer number, and appliance list, and mark the briefcase as verification pending.",
+      "If the certificate is missing, explain it is legally required, offer inspection guidance or a Gas Safe referral, and mark the briefcase as inspection required.",
+      "If the status is unclear, request a boiler photo and any paperwork, recommend a gas-safety inspection if still uncertain, and keep the certificate status as awaiting verification or inspection.",
     ],
     insights: [
       "Gas safety status is more helpful when reviewed alongside EICR and EPC answers.",
@@ -1446,11 +1656,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can interpret how EICR status affects the safety-compliance picture.",
     questionHelp:
       "This is asking whether a valid Electrical Installation Condition Report is already available for the property.",
+    smartResponse: [
+      "No problem, I can help with that.",
+      "A valid EICR is normally required for rented and HMO properties.",
+      "It is usually expected to be issued within the last 5 years by a qualified electrician and should clearly show whether the result is satisfactory or unsatisfactory.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain whether the current compliance picture still looks incomplete without the EICR.",
-      "Suggest asking for upload, expiry confirmation, or follow-up only if needed.",
-      "Use Agent Z when the customer is not sure whether the report is still valid.",
+      "If the EICR exists, request upload, verify the issue date, accreditation, satisfactory status, and any remedial actions, and mark the briefcase as verification pending.",
+      "If the EICR is missing, explain it is legally required, recommend an electrical inspection, and mark the briefcase as inspection required before compliance can proceed.",
+      "If the status is unclear, request a fuse-board photo and any electrical paperwork, recommend an EICR inspection if needed, and keep the report status as awaiting verification or inspection.",
     ],
     insights: [
       "The EICR answer often matters most when it conflicts with other safety answers.",
@@ -1469,11 +1684,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can explain how EPC status fits into the wider compliance review.",
     questionHelp:
       "This question is simply about whether an EPC is available now, not whether the property already meets every efficiency expectation.",
+    smartResponse: [
+      "No problem, I can help with that.",
+      "An EPC is usually required for rented properties and HMO applications.",
+      "It is normally valid for 10 years, should be issued by an accredited assessor, and should usually show a rating of E or above.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain how EPC availability contributes to the overall completeness of the file.",
-      "Recommend whether the EPC should be requested now or later alongside other compliance items.",
-      "Use Agent Z when the customer is unsure whether a valid EPC exists already.",
+      "If the EPC exists, request upload, verify the issue date, assessor accreditation, and rating, and flag any F or G rating as non-compliant for follow-up.",
+      "If the EPC is missing, explain it is legally required, recommend an EPC assessment, and keep compliance paused until the certificate is uploaded.",
+      "If the status is unclear, keep it as awaiting clarification, request the certificate or assessment next, and mark the briefcase as verification pending rather than complete.",
     ],
     insights: [
       "EPC availability may affect how complete the current compliance picture feels.",
@@ -1492,11 +1712,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help interpret the expected answer for how the property is supplied with water.",
     questionHelp:
       "This is usually about whether the site uses a normal mains supply or something more unusual that needs explanation.",
+    smartResponse: [
+      "No problem, I can help with this.",
+      "For HMO compliance, the property should usually have a safe and constant drinkable water supply, with adequate cold and hot water to fixtures and no major contamination issues.",
+      "It should also have enough pressure for the expected occupants and should not rely on an unsuitable shared external tap as the main supply.",
+    ],
     customerOptions: ["Mains supply", "Private or unusual arrangement", "Ask Agent Z"],
     agentXResponses: [
-      "Explain the most likely answer based on a standard residential setup.",
-      "Flag unusual supply arrangements that may deserve a follow-up note.",
-      "Recommend Agent Z when the customer does not know how the site is serviced.",
+      "If the water supply is confirmed, request confirmation of mains or tank supply, ask for photos of the boiler or hot-water system, and mark the briefcase as verification pending.",
+      "If the water supply is not adequate, treat it as a critical compliance failure, advise repair before proceeding, and escalate to health and safety review if necessary.",
+      "If the status is unclear, request photos of taps, boiler, and any cold-water tank, and trigger a site visit if the supply cannot be verified remotely.",
     ],
     insights: [
       "Most residential sites have straightforward water answers, but unusual cases should be explained clearly.",
@@ -1515,11 +1740,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help explain what answer best fits the property's sewage or foul drainage arrangement.",
     questionHelp:
       "This usually means whether the site connects to a normal mains system or relies on a private arrangement that should be identified.",
+    smartResponse: [
+      "No problem, I can help with this.",
+      "The property should have a safe and functional connection to the public sewer or another approved drainage system.",
+      "There should not be active blockages, leaks, backflow issues, or non-functional toilets and waste pipes.",
+    ],
     customerOptions: ["Mains drainage", "Private drainage arrangement", "Ask Agent Z"],
     agentXResponses: [
-      "Explain the likely answer for a typical urban residential site.",
-      "Flag when a private or unusual setup deserves a clearer note.",
-      "Use Agent Z when the customer is unsure whether the property is on mains drainage.",
+      "If drainage is confirmed, record the connection type, request supporting photos if needed, and treat the system as verification pending rather than automatically complete.",
+      "If drainage is not functioning properly, treat it as a critical compliance failure, advise plumbing or drainage repair, and pause compliance until fixed.",
+      "If the status is unclear, request photos of manholes, external drainage, and waste pipes, ask about smells or slow drainage, and trigger a site visit if still uncertain.",
     ],
     insights: [
       "Drainage answers are often simple, but a private system can materially change the discussion.",
@@ -1538,11 +1768,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help interpret how rainwater or surface runoff is likely handled at the site.",
     questionHelp:
       "This question usually relates to how surface water is drained, especially if new hardstanding, roof changes, or altered access are proposed.",
+    smartResponse: [
+      "No problem, I can help with this.",
+      "Surface water drainage should usually prevent flooding, water pooling, damp, mould, and structural damage.",
+      "Rainwater should normally drain into an appropriate sewer, soakaway, or sustainable drainage system, not into the foul sewer unless explicitly permitted.",
+    ],
     customerOptions: ["Standard drainage arrangement", "Sustainable / site-specific arrangement", "Ask Agent Z"],
     agentXResponses: [
-      "Explain the likely answer based on whether the proposal changes hard surfaces or roof area.",
-      "Suggest a cautious follow-up if the customer is unsure how runoff is currently handled.",
-      "Recommend Agent Z when drainage implications are unclear from the saved answers.",
+      "If surface-water drainage is confirmed, request photos of gutters, downpipes, and drainage points, ask for the drainage type, and mark the briefcase as verification pending.",
+      "If drainage is missing or failing, treat it as a major compliance issue, recommend repair or installation, and pause compliance until the issue is resolved.",
+      "If the status is unclear, request external drainage photos and any signs of water pooling, and trigger a drainage assessment site visit if needed.",
     ],
     insights: [
       "Surface water becomes more relevant when the proposal changes roofs, paving, or site layout.",
@@ -1561,15 +1796,20 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can explain what councils usually expect around waste storage and access.",
     questionHelp:
       "This field usually needs a short description covering where bins are stored and how collection access works.",
+    smartResponse: [
+      "No problem, I can help with this.",
+      "Waste arrangements should usually provide enough bin capacity for the number of occupants, include the correct bin types, use secure and pest-proof storage, and allow clear collection access.",
+      "There should not be rubbish building up in front or rear garden areas.",
+    ],
     customerOptions: [
       "Describe existing bin storage",
       "Describe collection access",
       "Use Agent Z to draft the wording",
     ],
     agentXResponses: [
-      "Draft a simple waste-arrangements description based on the property setup.",
-      "Explain what councils usually expect to hear about storage and collection access.",
-      "Recommend a follow-up only if the property use is intensifying and the answer stays vague.",
+      "If waste arrangements are confirmed, request photos of the storage area, confirm the bin types, check whether capacity matches occupancy, and mark the briefcase as verification pending.",
+      "If waste arrangements are missing, advise the customer to put compliant bins and storage in place before proceeding, and mark the briefcase as action required.",
+      "If the position is unclear, request photos of front and rear waste areas, ask for bin-type confirmation, and trigger a waste-assessment visit if needed.",
     ],
     insights: [
       "Waste arrangements are often easier to answer when framed around practical collection access.",
@@ -1588,11 +1828,16 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can assess whether proposed renewable measures need more detail now.",
     questionHelp:
       "This question is mainly about whether any renewable or energy-saving installation forms part of the proposal.",
+    smartResponse: [
+      "No problem, I can help with that.",
+      "Renewable or low-carbon systems can include solar panels, solar thermal, air-source or ground-source heat pumps, battery storage, micro-wind systems, and EV charging points.",
+      "These measures are often supported, but they still need proper classification and technical review depending on the type and location.",
+    ],
     customerOptions: ["Yes", "No", "Ask Agent Z"],
     agentXResponses: [
-      "Explain whether the proposal sounds like it includes any renewable measure at all.",
-      "Flag that visible equipment or structural change may need more detail later.",
-      "Use Agent Z when the customer mentions a green measure but not clearly enough to classify it.",
+      "If renewable installations are proposed, request the system type, installation location, and area photos, then trigger planning classification and any related fire-safety review.",
+      "If no renewable installation is proposed, simply record the answer and update the briefcase accordingly.",
+      "If the answer is unclear, ask what system is being considered, request roof or external-area photos, and offer a feasibility assessment before confirming the route.",
     ],
     insights: [
       "Renewable-energy answers usually matter more when they imply visible or structural changes.",
@@ -1638,15 +1883,20 @@ const AGENT_Z_PLAYBOOK: Partial<Record<AgentZKey, AgentZPlaybookEntry>> = {
       "Agent Z can help explain which extra consent routes may be relevant to the case.",
     questionHelp:
       "Use this when the customer may need something extra such as conservation area consent, tree works consent, or another related permission.",
+    smartResponse: [
+      "No problem, I can help with that.",
+      "Additional consents can include freeholder consent, mortgage lender consent, building-control approval, planning permission or lawful development certificates, party-wall agreements, conservation-area consent, listed-building consent, or environmental-health approval.",
+      "Which ones apply depends on the property type, location, ownership position, and the works being proposed.",
+    ],
     customerOptions: [
       "Select a known extra consent",
       "Multiple consents may apply",
       "Ask Agent Z / need advice",
     ],
     agentXResponses: [
-      "Shortlist the most likely extra consents from the current site and heritage answers.",
-      "Explain why the answer is a flag for follow-up rather than a final legal conclusion.",
-      "Suggest the safest next check before telling the customer a consent definitely applies.",
+      "If additional consents are declared, request the consent type, ask whether it has already been obtained, collect any supporting documents, and trigger legal or planning review.",
+      "If no extra consent is required, record the answer and keep the briefcase updated without further escalation.",
+      "If the customer is unsure, ask whether the property is leasehold, mortgaged, structurally changing, or in a conservation setting, and offer a consent-check review before treating the answer as final.",
     ],
     insights: [
       "Additional consents often act as early flags rather than final conclusions.",
@@ -1666,6 +1916,7 @@ export default function EligibilityDetailsCard({
   loading,
   projectId,
   projectServiceName,
+  viewMode = "eligibility",
 }: EligibilityDetailsCardProps) {
   const agentZPanelRef = useRef<HTMLDivElement | null>(null)
   const [showEmptyFields, setShowEmptyFields] = useState(true)
@@ -1701,6 +1952,19 @@ export default function EligibilityDetailsCard({
   const dimensionsAgentZMessage = getDimensionsAgentZMessage(eligibilityData)
   const completionLabel = `${eligibilityData.completionStatus.percentage}%`
   const completionHint = formatEligibilityStatus(eligibilityData.status)
+
+  if (viewMode === "checklist") {
+    return (
+      <div className="space-y-5">
+        <EligibilityChecklistCard
+          serviceName={serviceName}
+          projectId={projectId ?? eligibilityData.projectId}
+          customerName={applicantName}
+          councilName={councilName}
+        />
+      </div>
+    )
+  }
 
   const stepSummaries = ACCORDION_STEPS.map((step) => {
     const sections = step.sections.map((section) => {
@@ -2183,6 +2447,109 @@ export default function EligibilityDetailsCard({
           active={agentZSelection !== "general"}
           onReset={() => setAgentZSelection("general")}
         />
+      </div>
+    </div>
+  )
+}
+
+function EligibilityChecklistCard({
+  serviceName,
+  projectId,
+  customerName,
+  councilName,
+}: {
+  serviceName: string
+  projectId: string
+  customerName: string
+  councilName: string
+}) {
+  return (
+    <div className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_16px_40px_-34px_rgba(15,23,42,0.55)]">
+      <div className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 px-5 py-5 text-white">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-400/15 ring-1 ring-cyan-300/30">
+            <Bot size={20} className="text-cyan-200" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200">
+              Agent Z SOP
+            </p>
+            <h4 className="mt-2 text-xl font-semibold text-white">
+              Mandatory HMO Licence + Planning Permission Checklist
+            </h4>
+            <p className="mt-3 text-sm leading-7 text-slate-100/90">
+              Agent Z has prepared this SOP and checklist for review for Client
+              ID <span className="font-semibold text-white">{projectId}</span>,
+              client name{" "}
+              <span className="font-semibold text-white">{customerName}</span>,
+              under{" "}
+              <span className="font-semibold text-white">{councilName}</span>{" "}
+              council.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 lg:grid-cols-3">
+        <ChecklistPanel
+          title="Documents You Must Verify"
+          items={CHECKLIST_DOCUMENTS}
+          tone="blue"
+        />
+        <ChecklistPanel
+          title="Property Compliance Requirements"
+          items={CHECKLIST_COMPLIANCE}
+          tone="emerald"
+        />
+        <ChecklistPanel
+          title="Details of Drawings and Plans required "
+          items={CHECKLIST_DRAWINGS}
+          tone="amber"
+        />
+      </div>
+
+      <div className="border-t border-slate-200 bg-white px-4 py-4">
+        <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-900 text-white">
+              <Bot size={18} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">
+                Agent Z Workflow to Agent X
+              </p>
+              <h5 className="mt-2 text-lg font-semibold text-slate-950">
+                Workflow for Mandatory HMO Licence + Planning (Newham)
+              </h5>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Agent Z is instructing Agent X on the operational workflow for this
+                selected service.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            {AGENT_Z_WORKFLOW_STEPS.map((step) => (
+              <div
+                key={step.title}
+                className="rounded-2xl border border-slate-200 bg-white p-4"
+              >
+                <p className="text-sm font-semibold text-slate-950">{step.title}</p>
+                <div className="mt-3 space-y-2.5">
+                  {step.items.map((item) => (
+                    <div
+                      key={`${step.title}-${item}`}
+                      className="flex items-start gap-2.5 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2.5"
+                    >
+                      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
+                      <p className="text-sm leading-6 text-slate-700">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -3007,8 +3374,7 @@ function QuestionRow({
 
       {!row.answered && row.agentZKey && row.kind !== "resource" ? (
         <div className="mt-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-          {playbookEntry?.questionHelp ??
-            "Agent can help. Open Agent Z to review guidance for this question before following up."}
+          Use the Ask Agent Z button to review the response in the Agent Z workspace.
         </div>
       ) : null}
     </div>
@@ -3095,8 +3461,8 @@ function AgentZWorkspacePanel({
 
   return (
     <aside ref={panelRef} className="xl:sticky xl:top-6">
-      <div className="overflow-hidden rounded-[28px] border border-slate-900/10 bg-slate-950 text-white shadow-[0_24px_60px_-34px_rgba(15,23,42,0.85)]">
-        <div className="bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 px-5 py-5">
+      <div className="flex max-h-[80vh] flex-col overflow-x-hidden overflow-y-auto rounded-[28px] border border-slate-900/10 bg-slate-950 text-white shadow-[0_24px_60px_-34px_rgba(15,23,42,0.85)] xl:max-h-[calc(100vh-3rem)]">
+        <div className="shrink-0 bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 px-5 py-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-400/15 ring-1 ring-cyan-300/30">
@@ -3169,11 +3535,19 @@ function AgentZWorkspacePanel({
             </div> */}
 
             {active ? (
-              <div className="mt-4 rounded-2xl bg-white/5 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                  Current Answer
-                </p>
-                <p className="mt-2 text-sm text-white">{answerLabel}</p>
+              <div className="mt-4 space-y-3">
+                {playbookEntry?.smartResponse?.length ? (
+                  <div className="rounded-2xl bg-cyan-400/10 px-4 py-3 ring-1 ring-cyan-300/20">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                      Agent Z Smart Response
+                    </p>
+                    <div className="mt-2 space-y-2 text-sm leading-7 text-slate-100/90">
+                      {playbookEntry.smartResponse.map((item) => (
+                        <p key={item}>{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="mt-4 rounded-2xl bg-white/5 px-4 py-3">
@@ -3205,7 +3579,7 @@ function AgentZWorkspacePanel({
         <div className="space-y-4 bg-slate-950 px-5 py-5">
           {active ? (
             <>
-              <div className="rounded-3xl border border-blue-400/20 bg-white/5 p-4">
+              {/* <div className="rounded-3xl border border-blue-400/20 bg-white/5 p-4">
                 <div className="flex items-center gap-2 text-blue-100">
                   <Info size={18} />
                   <p className="text-sm font-semibold uppercase tracking-[0.18em]">
@@ -3215,9 +3589,9 @@ function AgentZWorkspacePanel({
                 <p className="mt-4 rounded-2xl border border-white/10 bg-slate-900/45 px-4 py-3 text-sm leading-7 text-slate-100/90">
                   {questionHelp}
                 </p>
-              </div>
+              </div> */}
 
-              <div className="rounded-3xl border border-violet-400/20 bg-white/5 p-4">
+              {/* <div className="rounded-3xl border border-violet-400/20 bg-white/5 p-4">
                 <div className="flex items-center gap-2 text-violet-100">
                   <Bot size={18} />
                   <p className="text-sm font-semibold uppercase tracking-[0.18em]">
@@ -3234,7 +3608,7 @@ function AgentZWorkspacePanel({
                     </div>
                   ))}
                 </div>
-              </div>
+              </div> */}
 
               <div className="rounded-3xl border border-amber-400/20 bg-white/5 p-4">
                 <div className="flex items-center gap-2 text-amber-100">
@@ -3381,5 +3755,57 @@ function AgentZWorkspacePanel({
         </div>
       </div>
     </aside>
+  )
+}
+
+function ChecklistPanel({
+  title,
+  items,
+  tone,
+}: {
+  title: string
+  items: readonly string[]
+  tone: "blue" | "emerald" | "amber"
+}) {
+  const toneClasses =
+    tone === "emerald"
+      ? {
+          card: "border-emerald-200 bg-emerald-50/70",
+          badge: "bg-emerald-100 text-emerald-700",
+          bullet: "bg-emerald-500",
+        }
+      : tone === "amber"
+      ? {
+          card: "border-amber-200 bg-amber-50/70",
+          badge: "bg-amber-100 text-amber-700",
+          bullet: "bg-amber-500",
+        }
+      : {
+          card: "border-blue-200 bg-blue-50/70",
+          badge: "bg-blue-100 text-blue-700",
+          bullet: "bg-blue-500",
+        }
+
+  return (
+    <div className={`rounded-[22px] border p-4 ${toneClasses.card}`}>
+      <div className="flex items-center justify-between gap-3">
+        <h5 className="text-sm font-semibold text-slate-950">{title}</h5>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${toneClasses.badge}`}>
+          {items.length} items
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-2.5">
+        {items.map((item) => (
+          <div
+            key={`${title}-${item}`}
+            className="flex items-start gap-2.5 rounded-2xl border border-white/80 bg-white/90 px-3 py-2.5"
+          >
+            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${toneClasses.bullet}`} />
+            <p className="text-sm leading-6 text-slate-700">{item}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
