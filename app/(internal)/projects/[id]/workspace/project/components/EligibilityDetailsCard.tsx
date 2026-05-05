@@ -1669,6 +1669,7 @@ export default function EligibilityDetailsCard({
 }: EligibilityDetailsCardProps) {
   const agentZPanelRef = useRef<HTMLDivElement | null>(null)
   const [showEmptyFields, setShowEmptyFields] = useState(true)
+  const [showDimensionsAgentZNote, setShowDimensionsAgentZNote] = useState(false)
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({
     "step-1": true,
   })
@@ -1697,6 +1698,7 @@ export default function EligibilityDetailsCard({
   const serviceName = getServiceNameValue(eligibilityData, projectServiceName)
   const councilName = formatEligibilityFieldValue(eligibilityData, "council")
   const subscriptionDetails = getSubscriptionDetailsValue(eligibilityData)
+  const dimensionsAgentZMessage = getDimensionsAgentZMessage(eligibilityData)
   const completionLabel = `${eligibilityData.completionStatus.percentage}%`
   const completionHint = formatEligibilityStatus(eligibilityData.status)
 
@@ -2102,10 +2104,45 @@ export default function EligibilityDetailsCard({
                                     </span>
                                   ) : null}
                                 </div>
-                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                                  {section.answeredCount}/{section.totalCount}
-                                </span>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  {section.title === "Dimensions" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setShowDimensionsAgentZNote((prev) => !prev)
+                                      }
+                                      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                                        showDimensionsAgentZNote
+                                          ? "bg-gradient-to-r from-slate-700 via-indigo-600 to-blue-500 text-white shadow-[0_10px_24px_-16px_rgba(37,99,235,0.9)] ring-2 ring-cyan-200/70"
+                                          : "border border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100"
+                                      }`}
+                                    >
+                                      <Bot size={14} />
+                                      Ask Agent Z
+                                    </button>
+                                  ) : null}
+                                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                                    {section.answeredCount}/{section.totalCount}
+                                  </span>
+                                </div>
                               </div>
+                              {section.title === "Dimensions" && showDimensionsAgentZNote ? (
+                                <div className="mt-3 rounded-2xl border border-blue-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.96)_0%,rgba(255,255,255,0.98)_100%)] px-3.5 py-3">
+                                  <div className="flex items-start gap-3">
+                                    <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-900 text-white">
+                                      <Bot size={16} />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">
+                                        Agent Z Update
+                                      </p>
+                                      <p className="mt-1.5 text-sm leading-6 text-slate-700">
+                                        {dimensionsAgentZMessage}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : null}
                               <div className="mt-3 space-y-2.5">
                                 {section.rows.map((row) => (
                                   <QuestionRow
@@ -2130,7 +2167,6 @@ export default function EligibilityDetailsCard({
 
         <AgentZWorkspacePanel
           panelRef={agentZPanelRef}
-          projectId={projectId ?? eligibilityData.projectId}
           serviceName={serviceName}
           customerName={applicantName}
           councilName={councilName}
@@ -2255,6 +2291,26 @@ function formatDateValue(value?: string | null) {
     month: "short",
     year: "numeric",
   }).format(date)
+}
+
+function getDimensionsAgentZMessage(eligibility: EligibilityData) {
+  const bookedDate = formatDateValue(eligibility.createdAt)
+  const latestUpdateDate = formatDateValue(eligibility.updatedAt)
+  const dimensionsStep = eligibility.completionStatus.steps.find((step) => step.step === 2)
+
+  if (bookedDate === "-" && latestUpdateDate === "-") {
+    return "Customer has booked a site survey for dimensions. The survey timeline will appear here once booking milestones are connected."
+  }
+
+  if (dimensionsStep?.completed && latestUpdateDate !== "-") {
+    return `Customer has booked a site survey for dimensions on ${bookedDate} and completed it on ${latestUpdateDate}.`
+  }
+
+  if (latestUpdateDate !== "-") {
+    return `Customer has booked a site survey for dimensions on ${bookedDate}. The latest dimensions update was recorded on ${latestUpdateDate}.`
+  }
+
+  return `Customer has booked a site survey for dimensions on ${bookedDate}.`
 }
 
 function formatEligibilityStatus(status?: string | null) {
@@ -2961,7 +3017,6 @@ function QuestionRow({
 
 function AgentZWorkspacePanel({
   panelRef,
-  projectId,
   serviceName,
   customerName,
   councilName,
@@ -2979,7 +3034,6 @@ function AgentZWorkspacePanel({
   onReset,
 }: {
   panelRef: RefObject<HTMLDivElement | null>
-  projectId: string
   serviceName: string
   customerName: string
   councilName: string

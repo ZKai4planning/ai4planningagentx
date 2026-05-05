@@ -5,7 +5,9 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarDays,
   CheckCircle2,
+  Clock3,
   Eye,
   FolderKanban,
   MessageSquare,
@@ -91,6 +93,12 @@ type ProjectRow = {
   subscriptionDetails: string
   paymentStatus: "paid" | "pending"
   updatedAtRaw: string
+  consultationBooked: boolean
+  consultationDate: string
+  consultationTime: string
+  consultationTimestamp: number | null
+  consultant: string
+  consultantTitle: string
 }
 
 const DEFAULT_PAGINATION: ApiPagination = {
@@ -150,6 +158,35 @@ function getNestedValue(source: unknown, path: readonly string[]) {
   return current
 }
 
+function getFirstStringValue(source: unknown, candidatePaths: readonly (readonly string[])[]) {
+  for (const path of candidatePaths) {
+    const value = getNestedValue(source, path)
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return undefined
+}
+
+function getFirstBooleanValue(source: unknown, candidatePaths: readonly (readonly string[])[]) {
+  for (const path of candidatePaths) {
+    const value = getNestedValue(source, path)
+
+    if (typeof value === "boolean") {
+      return value
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === "true") return true
+      if (normalized === "false") return false
+    }
+  }
+
+  return undefined
+}
+
 function getSubscriptionDetails(project: ApiProject) {
   const candidatePaths = [
     ["subscriptionDetails"],
@@ -197,6 +234,62 @@ function getPaymentStatus(project: ApiProject): "paid" | "pending" {
 }
 
 function mapProjectToRow(project: ApiProject): ProjectRow {
+  const consultationDateTimeValue = getFirstStringValue(project, [
+    ["consultationDateTime"],
+    ["consultation", "dateTime"],
+    ["consultation", "scheduledAt"],
+    ["consultation", "startsAt"],
+    ["appointmentAt"],
+    ["appointment", "dateTime"],
+    ["appointment", "scheduledAt"],
+    ["schedule", "scheduledAt"],
+    ["schedule", "dateTime"],
+    ["scheduledAt"],
+  ])
+  const consultationDateValue = getFirstStringValue(project, [
+    ["consultationDate"],
+    ["consultation", "date"],
+    ["appointmentDate"],
+    ["appointment", "date"],
+    ["schedule", "date"],
+  ])
+  const consultationTimeValue = getFirstStringValue(project, [
+    ["consultationTime"],
+    ["consultation", "time"],
+    ["appointmentTime"],
+    ["appointment", "time"],
+    ["schedule", "time"],
+  ])
+  const consultationTimestamp = getConsultationTimestamp(
+    consultationDateTimeValue,
+    consultationDateValue,
+    consultationTimeValue
+  )
+  const consultationBooked =
+    getFirstBooleanValue(project, [
+      ["consultationBooked"],
+      ["consultation", "booked"],
+      ["appointmentBooked"],
+      ["appointment", "booked"],
+      ["schedule", "booked"],
+    ]) ?? Boolean(consultationDateTimeValue || consultationDateValue || consultationTimeValue)
+  const consultant =
+    getFirstStringValue(project, [
+      ["consultant"],
+      ["consultantName"],
+      ["consultation", "consultant"],
+      ["consultation", "consultantName"],
+      ["appointment", "consultant"],
+      ["schedule", "consultant"],
+    ]) ?? getDisplayValue(project.agentXName, project.agentX?.fullName, project.agentX?.email)
+  const consultantTitle =
+    getFirstStringValue(project, [
+      ["consultantTitle"],
+      ["consultation", "consultantTitle"],
+      ["appointment", "consultantTitle"],
+      ["schedule", "consultantTitle"],
+    ]) ?? "Planning Consultant"
+
   return {
     id: project.projectId,
     projectId: project.projectId,
@@ -214,6 +307,22 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
     subscriptionDetails: getSubscriptionDetails(project),
     paymentStatus: getPaymentStatus(project),
     updatedAtRaw: project.updatedAt,
+    consultationBooked,
+    consultationDate:
+      consultationTimestamp !== null
+        ? formatScheduleDate(new Date(consultationTimestamp).toISOString())
+        : consultationDateValue
+          ? formatScheduleDate(consultationDateValue)
+          : "-",
+    consultationTime:
+      consultationTimestamp !== null
+        ? formatScheduleTime(new Date(consultationTimestamp).toISOString())
+        : consultationTimeValue
+          ? formatScheduleTime(consultationTimeValue)
+          : "-",
+    consultationTimestamp,
+    consultant,
+    consultantTitle,
   }
 }
 
@@ -272,6 +381,214 @@ function getDaysAgo(value: string) {
   }
 
   return Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24))
+}
+
+function formatScheduleDate(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "-"
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date)
+}
+
+function formatScheduleTime(value: string) {
+  const date = new Date(value)
+
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(date)
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return "-"
+  }
+
+  const normalized = trimmed.replace(/\s+/g, "")
+  const parsedTime = new Date(`1970-01-01T${normalized}`)
+
+  if (!Number.isNaN(parsedTime.getTime())) {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(parsedTime)
+  }
+
+  return trimmed
+}
+
+function getConsultationTimestamp(dateTimeValue?: string, dateValue?: string, timeValue?: string) {
+  if (dateTimeValue) {
+    const timestamp = new Date(dateTimeValue).getTime()
+    if (!Number.isNaN(timestamp)) {
+      return timestamp
+    }
+  }
+
+  if (dateValue && timeValue) {
+    const timestamp = new Date(`${dateValue} ${timeValue}`).getTime()
+    if (!Number.isNaN(timestamp)) {
+      return timestamp
+    }
+  }
+
+  if (dateValue) {
+    const timestamp = new Date(dateValue).getTime()
+    if (!Number.isNaN(timestamp)) {
+      return timestamp
+    }
+  }
+
+  return null
+}
+
+function buildMockConsultationRows(projects: ProjectRow[]) {
+  const mockConsultants = [
+    { name: "Sarah", title: "Senior Planning Consultant" },
+    { name: "Oliver", title: "Planning Consultant" },
+    { name: "Priya", title: "Householder Specialist" },
+    { name: "Daniel", title: "Planning Case Advisor" },
+  ] as const
+  const mockSlots = [
+    { dayOffset: 1, hour: 9, minute: 30 },
+    { dayOffset: 2, hour: 11, minute: 0 },
+    { dayOffset: 4, hour: 14, minute: 30 },
+    { dayOffset: -1, hour: 16, minute: 0 },
+  ] as const
+
+  const defaultRows: ProjectRow[] = [
+    {
+      id: "demo-1",
+      projectId: "AI4P-1001",
+      customer: "Oliver Bennett",
+      service: "Rear Extension Planning",
+      subService: "Householder",
+      councilName: "Newham Council",
+      agentXName: "-",
+      agentYName: "-",
+      stage: "Consultation",
+      layoutAndCompliances: "Consultation",
+      status: "in_progress",
+      createdOn: "-",
+      updatedOn: "-",
+      subscriptionDetails: "Gold",
+      paymentStatus: "paid",
+      updatedAtRaw: new Date().toISOString(),
+      consultationBooked: true,
+      consultationDate: "-",
+      consultationTime: "-",
+      consultationTimestamp: null,
+      consultant: "-",
+      consultantTitle: "-",
+    },
+    {
+      id: "demo-2",
+      projectId: "AI4P-1002",
+      customer: "Amelia Stone",
+      service: "Loft Conversion Advice",
+      subService: "Permitted Development",
+      councilName: "Hackney Council",
+      agentXName: "-",
+      agentYName: "-",
+      stage: "Consultation",
+      layoutAndCompliances: "Consultation",
+      status: "active",
+      createdOn: "-",
+      updatedOn: "-",
+      subscriptionDetails: "Silver",
+      paymentStatus: "paid",
+      updatedAtRaw: new Date().toISOString(),
+      consultationBooked: true,
+      consultationDate: "-",
+      consultationTime: "-",
+      consultationTimestamp: null,
+      consultant: "-",
+      consultantTitle: "-",
+    },
+    {
+      id: "demo-3",
+      projectId: "AI4P-1003",
+      customer: "Jacob Hughes",
+      service: "Change of Use Review",
+      subService: "Commercial",
+      councilName: "Redbridge Council",
+      agentXName: "-",
+      agentYName: "-",
+      stage: "Consultation",
+      layoutAndCompliances: "Consultation",
+      status: "in_progress",
+      createdOn: "-",
+      updatedOn: "-",
+      subscriptionDetails: "Bronze",
+      paymentStatus: "pending",
+      updatedAtRaw: new Date().toISOString(),
+      consultationBooked: true,
+      consultationDate: "-",
+      consultationTime: "-",
+      consultationTimestamp: null,
+      consultant: "-",
+      consultantTitle: "-",
+    },
+    {
+      id: "demo-4",
+      projectId: "AI4P-1004",
+      customer: "Sophia Clarke",
+      service: "Garage Conversion Planning",
+      subService: "Residential",
+      councilName: "Barnet Council",
+      agentXName: "-",
+      agentYName: "-",
+      stage: "Consultation",
+      layoutAndCompliances: "Consultation",
+      status: "active",
+      createdOn: "-",
+      updatedOn: "-",
+      subscriptionDetails: "Gold",
+      paymentStatus: "paid",
+      updatedAtRaw: new Date().toISOString(),
+      consultationBooked: true,
+      consultationDate: "-",
+      consultationTime: "-",
+      consultationTimestamp: null,
+      consultant: "-",
+      consultantTitle: "-",
+    },
+  ]
+  const sourceRows = [...projects.slice(0, 4)]
+
+  if (sourceRows.length < 4) {
+    sourceRows.push(...defaultRows.slice(0, 4 - sourceRows.length))
+  }
+
+  return sourceRows.map((project, index) => {
+    const slot = mockSlots[index % mockSlots.length]
+    const consultant = mockConsultants[index % mockConsultants.length]
+    const scheduledAt = new Date()
+
+    scheduledAt.setHours(slot.hour, slot.minute, 0, 0)
+    scheduledAt.setDate(scheduledAt.getDate() + slot.dayOffset)
+
+    return {
+      ...project,
+      consultationBooked: true,
+      consultationTimestamp: scheduledAt.getTime(),
+      consultationDate: formatScheduleDate(scheduledAt.toISOString()),
+      consultationTime: formatScheduleTime(scheduledAt.toISOString()),
+      consultant: project.agentXName !== "-" ? project.agentXName : consultant.name,
+      consultantTitle: consultant.title,
+    }
+  })
 }
 
 function StatusBadge({ status }: { status: string | undefined }) {
@@ -370,20 +687,55 @@ export default function DashboardPage() {
     }
   }, [projects])
 
-  const spotlightProjects = useMemo(() => {
-    return [...projects]
-      .sort((a, b) => {
-        const aAttention = needsAttention(a) ? 1 : 0
-        const bAttention = needsAttention(b) ? 1 : 0
+  const scheduledConsultations = useMemo(() => {
+    const now = Date.now()
 
-        if (aAttention !== bAttention) {
-          return bAttention - aAttention
+    return [...projects]
+      .filter(
+        (project) =>
+          project.consultationBooked || project.consultationTimestamp !== null || project.consultationDate !== "-"
+      )
+      .sort((a, b) => {
+        const aUpcoming = a.consultationTimestamp !== null && a.consultationTimestamp >= now
+        const bUpcoming = b.consultationTimestamp !== null && b.consultationTimestamp >= now
+
+        if (aUpcoming !== bUpcoming) {
+          return aUpcoming ? -1 : 1
+        }
+
+        if (aUpcoming && bUpcoming && a.consultationTimestamp !== null && b.consultationTimestamp !== null) {
+          return a.consultationTimestamp - b.consultationTimestamp
+        }
+
+        if (a.consultationTimestamp !== null && b.consultationTimestamp !== null) {
+          return b.consultationTimestamp - a.consultationTimestamp
+        }
+
+        if (a.consultationTimestamp !== null) {
+          return -1
+        }
+
+        if (b.consultationTimestamp !== null) {
+          return 1
         }
 
         return new Date(b.updatedAtRaw).getTime() - new Date(a.updatedAtRaw).getTime()
       })
-      .slice(0, 3)
+      .slice(0, 4)
   }, [projects])
+
+  const consultantScheduleCards = useMemo(() => {
+    const liveRows = scheduledConsultations.slice(0, 4)
+
+    if (liveRows.length >= 4) {
+      return liveRows
+    }
+
+    const liveIds = new Set(liveRows.map((project) => project.id))
+    const fallbackRows = buildMockConsultationRows(projects).filter((project) => !liveIds.has(project.id))
+
+    return [...liveRows, ...fallbackRows].slice(0, 4)
+  }, [projects, scheduledConsultations])
 
   const recentProjects = useMemo(() => {
     return [...projects]
@@ -531,7 +883,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl">
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Welcome Agent {displayName}, here is the live project view for your team.
+                  Welcome Agent X
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
                   This dashboard now pulls the same project data as the projects page, so your overview and table stay aligned.
@@ -586,53 +938,105 @@ export default function DashboardPage() {
           <div className="rounded-3xl border bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Priority projects</h2>
-                <p className="text-sm text-slate-500">Projects needing attention are surfaced first, then sorted by recent activity.</p>
+                <h2 className="text-xl font-semibold text-slate-900">Consultant schedule</h2>
+                <p className="text-sm text-slate-500">
+                  Upcoming bookings appear first and the section keeps a minimum of 4 cards visible.
+                </p>
               </div>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                {spotlightProjects.length} shown
+                Min 4 shown
               </span>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
               {loading ? (
-                <PanelMessage message="Loading priority projects..." />
-              ) : spotlightProjects.length === 0 ? (
-                <PanelMessage message={error ? "Priority projects could not be loaded." : "No projects available yet."} />
+                <PanelMessage message="Loading consultant schedule..." />
               ) : (
-                spotlightProjects.map((project) => (
-                  <article key={project.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{project.projectId}</p>
-                        <h3 className="mt-2 text-base font-semibold text-slate-900">{project.customer}</h3>
+                consultantScheduleCards.map((project) => {
+                  const isUpcoming =
+                    project.consultationTimestamp !== null && project.consultationTimestamp >= Date.now()
+                  const consultantName = project.consultant === "-" ? "Our planning team" : project.consultant
+
+                  return (
+                    <article key={project.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-base font-semibold text-slate-900">{project.customer}</h3>
+                          <p className="mt-1 truncate text-sm text-slate-500">{project.service}</p>
+                        </div>
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                            isUpcoming
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                              : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+                          }`}
+                        >
+                          {isUpcoming ? "Upcoming" : "Recent"}
+                        </span>
                       </div>
-                      <StatusBadge status={project.status} />
-                    </div>
 
-                    <div className="mt-4 space-y-2 text-sm text-slate-600">
-                      <p><span className="font-medium text-slate-800">Service:</span> {project.service}</p>
-                      <p><span className="font-medium text-slate-800">Council:</span> {project.councilName}</p>
-                      <p><span className="font-medium text-slate-800">Stage:</span> {project.stage}</p>
-                      <p><span className="font-medium text-slate-800">Updated:</span> {project.updatedOn}</p>
-                    </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl bg-white px-3 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Consultant
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-slate-900">{consultantName}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {project.consultantTitle !== "-" ? project.consultantTitle : "Planning Consultant"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Date
+                          </p>
+                          <div className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-900">
+                            <CalendarDays size={15} className="text-blue-600" />
+                            <span>{project.consultationDate !== "-" ? project.consultationDate : "Pending"}</span>
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Time
+                          </p>
+                          <div className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-900">
+                            <Clock3 size={15} className="text-blue-600" />
+                            <span>{project.consultationTime !== "-" ? project.consultationTime : "Pending"}</span>
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Project
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-slate-900">{project.projectId}</p>
+                          <p className="mt-1 text-xs text-slate-500">{project.councilName}</p>
+                        </div>
+                      </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Link
-                        href={`/projects/${project.projectId}/workspace/project`}
-                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
-                      >
-                        Open Project
-                      </Link>
-                      <Link
-                        href={`/projects/${project.projectId}/workspace/customer-chat`}
-                        className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                      >
-                        Customer Chat
-                      </Link>
-                    </div>
-                  </article>
-                ))
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+                        <div>
+                          <p>{project.subService}</p>
+                          <p className="mt-1">{project.stage}</p>
+                        </div>
+                        <StatusBadge status={project.status} />
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link
+                          href={`/projects/${project.projectId}/workspace/project`}
+                          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                        >
+                          Open Project
+                        </Link>
+                        <Link
+                          href={`/projects/${project.projectId}/workspace/customer-chat`}
+                          className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                        >
+                          Customer Chat
+                        </Link>
+                      </div>
+                    </article>
+                  )
+                })
               )}
             </div>
           </div>
@@ -892,18 +1296,16 @@ function MetricPieChart({
     color: string
   }>
 }) {
-  const [hoveredMetric, setHoveredMetric] = useState<string | null>(null)
   const total = metrics.reduce((sum, metric) => sum + metric.value, 0)
   const radius = 42
   const strokeWidth = 18
   const circumference = 2 * Math.PI * radius
   const segments = getDonutSegments(metrics, total, circumference)
-  const activeMetric = metrics.find((metric) => metric.label === hoveredMetric) ?? null
 
   return (
     <div className="grid gap-5 lg:grid-cols-[240px_1fr] lg:items-center">
       <div className="mx-auto">
-        <div className="relative h-56 w-56" onMouseLeave={() => setHoveredMetric(null)}>
+        <div className="relative h-56 w-56">
           <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
             <circle cx="60" cy="60" r={radius} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
             {segments.map((metric) => (
@@ -917,33 +1319,24 @@ function MetricPieChart({
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${metric.segmentLength} ${circumference - metric.segmentLength}`}
                 strokeDashoffset={-metric.offset}
-                className="cursor-pointer transition-opacity duration-150"
-                style={{ opacity: hoveredMetric && hoveredMetric !== metric.label ? 0.45 : 1 }}
-                onMouseEnter={() => setHoveredMetric(metric.label)}
-              >
-                <title>{`${metric.label}: ${metric.value} (${formatMetricShare(metric.value, total)}%) - ${metric.helper}`}</title>
-              </circle>
+              />
             ))}
           </svg>
 
           <div className="absolute inset-[19%] flex items-center justify-center rounded-full bg-white text-center shadow-inner">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {activeMetric ? activeMetric.label : "Tracked KPI Total"}
+                Tracked KPI Total
               </p>
-              <p className="mt-1 text-3xl font-semibold text-slate-900">
-                {activeMetric ? activeMetric.value : total}
-              </p>
+              <p className="mt-1 text-3xl font-semibold text-slate-900">{total}</p>
               <p className="mt-1 text-[11px] text-slate-500">
-                {activeMetric ? `${formatMetricShare(activeMetric.value, total)}% of KPI total` : "Hover a slice"}
+                Across all KPI metrics
               </p>
             </div>
           </div>
         </div>
 
-        <p className="mt-2 max-w-56 text-center text-[11px] text-slate-500">
-          {activeMetric ? activeMetric.helper : "Move the cursor over a segment to inspect a KPI."}
-        </p>
+        <p className="mt-2 max-w-56 text-center text-[11px] text-slate-500">The legend lists each metric&apos;s total and share of the overall KPI count.</p>
       </div>
 
       <div className="space-y-2.5">
@@ -954,7 +1347,6 @@ function MetricPieChart({
             <div
               key={metric.label}
               className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 transition-colors"
-              onMouseEnter={() => setHoveredMetric(metric.label)}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
