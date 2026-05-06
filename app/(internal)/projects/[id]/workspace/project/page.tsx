@@ -1132,7 +1132,7 @@ export default function UserDetailsPage() {
   const triggerRoadmapItems = [
     {
       id: "trigger-survey",
-      label: "Survey",
+      label: "Insights for Agent X but not limited to the information as mentioned below",
       details: [
         "PLANNING TRIGGERS",
         "Property moves from C3 (single dwelling) -> C4 (small HMO)",
@@ -1148,7 +1148,7 @@ export default function UserDetailsPage() {
     },
     {
       id: "trigger-dimensions",
-      label: "Dimensions & Space Standards",
+      label: "Dimensions & Space Standards for Agent X but not limited to the information as mentioned below",
       details: [
         "BEDROOM SIZE REQUIREMENTS (NEWHAM)",
         "Single Occupancy: 6.51m² (min) / 7.5m² (recommended)",
@@ -1172,7 +1172,7 @@ export default function UserDetailsPage() {
     },
     {
       id: "trigger-compliance-documents",
-      label: "Compliance & Reports",
+      label: "Compliance & Reports for Agent X but not limited to the information as mentioned below",
       details: [
         "REPORTS & SURVEYS",
         "Site Measurement Survey",
@@ -1560,7 +1560,7 @@ export default function UserDetailsPage() {
         <div className="max-w-[1600px] mx-auto px-6 lg:px-8 mt-6">
           <div className="bg-white rounded-2xl border shadow-sm p-6">
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-slate-900">Triggers and Pending Documents</h3>
+              <h3 className="text-lg font-bold text-slate-900">Triggers and Pending Documents and survey reports</h3>
               <p className="mt-1 text-sm text-slate-500">Separate cards for each category below the roadmap, including a survey reports workspace.</p>
             </div>
 
@@ -1590,11 +1590,11 @@ export default function UserDetailsPage() {
                                   <div>
                                     {isAgentZIntelligenceCard ? (
                                       <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200">
-                                        Agent Z Intelligence
+                                        Agent Z  Planning Intelligence
                                       </p>
                                     ) : null}
                                     <p
-                                      className={`mt-1 text-sm font-bold ${
+                                      className={`mt-1 text-xs ${
                                         isAgentZIntelligenceCard
                                           ? "text-white"
                                           : isReceived
