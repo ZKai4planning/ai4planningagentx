@@ -4,7 +4,7 @@
 import CustomerJourney, { type JourneyStep } from "@/components/CustomerJourney"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, type ChangeEvent } from "react"
 import axiosInstance from "@/lib/axiosinstance"
 import jsPDF from "jspdf";
 import {
@@ -98,6 +98,23 @@ type EligibilityResponse = {
   data?: EligibilityData
 }
 
+type ApplicationUser = {
+  fullName?: string
+  email?: string
+  phoneNumber?: string
+}
+
+type ApplicationProject = Record<string, unknown> & {
+  projectId: string
+  user?: ApplicationUser | null
+}
+
+type ApplicationProjectsResponse = {
+  success?: boolean
+  message?: string
+  data?: ApplicationProject[]
+}
+
 type EligibilityFieldKey = keyof typeof eligibilityFieldMappings
 
 type EligibilityRow = {
@@ -119,15 +136,21 @@ type FinalReviewChecklistGroup = {
 }
 
 type BriefcaseDocumentItem = {
+  id?: string
   label: string
   status: string
   href?: string
+  previewHref?: string
   fileName?: string
+  fileSize?: string
   fileType?: string
   uploadedAt?: string
   source?: string
   note?: string
   group?: string
+  surveyDate?: string
+  surveyTime?: string
+  surveyLocation?: string
 }
 
 type QuoteService = {
@@ -289,6 +312,61 @@ function formatDateValue(value?: string | null) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
 }
 
+function formatTimeValue(value?: string | null) {
+  if (!value) return "-"
+  const trimmed = value.trim()
+  if (!trimmed) return "-"
+
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    const [hours = "00", minutes = "00"] = trimmed.split(":")
+    const normalizedHours = hours.padStart(2, "0")
+    return `${normalizedHours}:${minutes}`
+  }
+
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) return "-"
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(date)
+}
+
+function getNestedValue(source: unknown, path: readonly string[]) {
+  let current: unknown = source
+
+  for (const key of path) {
+    if (!current || typeof current !== "object") return undefined
+    current = (current as Record<string, unknown>)[key]
+  }
+
+  return current
+}
+
+function getFirstStringValue(source: unknown, candidatePaths: readonly (readonly string[])[]) {
+  for (const path of candidatePaths) {
+    const value = getNestedValue(source, path)
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+
+  return undefined
+}
+
+function getScheduleTimestamp(dateTimeValue?: string, dateValue?: string, timeValue?: string) {
+  if (dateTimeValue) {
+    const timestamp = new Date(dateTimeValue).getTime()
+    if (!Number.isNaN(timestamp)) return timestamp
+  }
+
+  if (dateValue && timeValue) {
+    const timestamp = new Date(`${dateValue} ${timeValue}`).getTime()
+    if (!Number.isNaN(timestamp)) return timestamp
+  }
+
+  if (dateValue) {
+    const timestamp = new Date(dateValue).getTime()
+    if (!Number.isNaN(timestamp)) return timestamp
+  }
+
+  return null
+}
+
 function formatEligibilityStatus(status?: string | null) {
   if (!status) return "Eligibility"
   return status.split("_").filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
@@ -402,6 +480,54 @@ function formatDimensionSummary(first: string, second: string) {
   return `${first}m x ${second}m`
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getFileNameFromHref(href?: string) {
+  if (!href) return "-"
+
+  try {
+    const url = new URL(href)
+    const lastSegment = url.pathname.split("/").filter(Boolean).pop()
+    return lastSegment ? decodeURIComponent(lastSegment) : href
+  } catch {
+    const sanitizedHref = href.split("#")[0]?.split("?")[0] ?? href
+    const lastSegment = sanitizedHref.split("/").filter(Boolean).pop()
+    return lastSegment || href
+  }
+}
+
+function getFileTypeLabel(fileNameOrHref?: string) {
+  if (!fileNameOrHref) return "-"
+  const source = fileNameOrHref.includes("/") ? getFileNameFromHref(fileNameOrHref) : fileNameOrHref
+  const extension = source.match(/\.[^.]+$/)?.[0]
+  return extension?.toLowerCase() ?? "File"
+}
+
+function isPdfDocument(fileNameOrHref?: string) {
+  return getFileTypeLabel(fileNameOrHref) === ".pdf"
+}
+
+function formatFullLocation(address?: string, postcode?: string) {
+  const normalizedAddress = (address ?? "").trim()
+  const normalizedPostcode = (postcode ?? "").trim()
+
+  if (!normalizedAddress && !normalizedPostcode) return "-"
+  if (!normalizedAddress) return normalizedPostcode
+  if (!normalizedPostcode) return normalizedAddress
+  if (normalizedAddress.toLowerCase().includes(normalizedPostcode.toLowerCase())) return normalizedAddress
+
+  return `${normalizedAddress}, ${normalizedPostcode}`
+}
+
+function getPdfPreviewSrc(href: string) {
+  if (href.startsWith("blob:")) return href
+  return `${href}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`
+}
+
 function buildRoadmapWithEligibility(baseRoadmap: WorkspaceRoadmapResponse, eligibility: EligibilityData | null): WorkspaceRoadmapResponse {
   const stages = baseRoadmap.stages.map((stage) =>
     stage.id === "checklist"
@@ -446,6 +572,7 @@ export default function UserDetailsPage() {
   const [roadmap, setRoadmap] = useState<WorkspaceRoadmapResponse>(defaultWorkspaceRoadmap)
   const [currentStageId, setCurrentStageId] = useState(defaultWorkspaceRoadmap.currentStageId)
   const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
+  const [applicationProject, setApplicationProject] = useState<ApplicationProject | null>(null)
   const [eligibilityLoading, setEligibilityLoading] = useState(true)
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const [journeyFieldActions, setJourneyFieldActions] = useState<Record<string, string>>({})
@@ -460,6 +587,11 @@ export default function UserDetailsPage() {
   const [quoteHistory, setQuoteHistory] = useState<GeneratedQuote[]>([]);
   const [viewingQuote, setViewingQuote] = useState<GeneratedQuote | null>(null);
   const [viewingDocument, setViewingDocument] = useState<BriefcaseDocumentItem | null>(null)
+  const [documentPreviewText, setDocumentPreviewText] = useState("")
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false)
+  const [documentPreviewError, setDocumentPreviewError] = useState("")
+  const [surveyReportUploads, setSurveyReportUploads] = useState<BriefcaseDocumentItem[]>([])
+  const surveyUploadInputRef = useRef<HTMLInputElement>(null)
   
   const router = useRouter()
   const roadmapStages = roadmap.stages
@@ -499,12 +631,81 @@ export default function UserDetailsPage() {
     return () => { active = false }
   }, [projectId])
 
+  useEffect(() => {
+    let active = true
+
+    const loadApplicationProject = async () => {
+      if (!projectId) {
+        setApplicationProject(null)
+        return
+      }
+
+      try {
+        const response = await axiosInstance.get<ApplicationProjectsResponse>("/projects/all", {
+          params: {
+            page: 1,
+            limit: 50,
+            isDeleted: false,
+            search: projectId,
+          },
+        })
+
+        if (!active) return
+
+        const matchedProject =
+          (response.data.data ?? []).find((project) => project.projectId === projectId) ?? null
+
+        setApplicationProject(matchedProject)
+      } catch {
+        if (!active) return
+        setApplicationProject(null)
+      }
+    }
+
+    void loadApplicationProject()
+    return () => { active = false }
+  }, [projectId])
+
   useEffect(() => { setRoadmap(buildRoadmapWithEligibility(baseRoadmap, eligibilityData)) }, [baseRoadmap, eligibilityData])
   useEffect(() => { setActiveSection(selectedSection) }, [selectedSection])
   useEffect(() => {
     const currentStageExists = roadmapStages.some((stage) => stage.id === currentStageId)
     if (!currentStageExists) setCurrentStageId(roadmap.currentStageId)
   }, [currentStageId, roadmap.currentStageId, roadmapStages])
+
+  useEffect(() => {
+    let active = true
+    const previewHref = viewingDocument?.previewHref
+
+    if (!previewHref || !previewHref.endsWith(".txt")) {
+      setDocumentPreviewText("")
+      setDocumentPreviewLoading(false)
+      setDocumentPreviewError("")
+      return () => { active = false }
+    }
+
+    const loadPreviewText = async () => {
+      setDocumentPreviewLoading(true)
+      setDocumentPreviewError("")
+
+      try {
+        const response = await fetch(previewHref)
+        if (!response.ok) throw new Error("Preview file could not be loaded.")
+        const text = await response.text()
+        if (!active) return
+        setDocumentPreviewText(text)
+      } catch {
+        if (!active) return
+        setDocumentPreviewText("")
+        setDocumentPreviewError("Preview content could not be loaded.")
+      } finally {
+        if (active) setDocumentPreviewLoading(false)
+      }
+    }
+
+    void loadPreviewText()
+    return () => { active = false }
+  }, [viewingDocument])
   
   useEffect(() => {
     if (!stepParam && currentStageId === defaultWorkspaceRoadmap.currentStageId && roadmap.currentStageId !== currentStageId) {
@@ -599,12 +800,59 @@ export default function UserDetailsPage() {
   }
 
   const handleViewDocument = (item: BriefcaseDocumentItem) => {
-    if (item.href) {
-      window.open(item.href, "_blank", "noopener,noreferrer")
+    setViewingDocument(item)
+  }
+
+  const handleOpenDocument = (item: BriefcaseDocumentItem) => {
+    if (!item.href) {
+      setViewingDocument(item)
       return
     }
 
-    setViewingDocument(item)
+    window.open(item.href, "_blank", "noopener,noreferrer")
+  }
+
+  const handleOpenSurveyUpload = () => {
+    surveyUploadInputRef.current?.click()
+  }
+
+  const handleSurveyReportUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    const pdfFiles = files.filter((file) => isPdfDocument(file.name) || file.type === "application/pdf")
+    if (pdfFiles.length === 0) return
+
+    const uploadedAt = new Date().toLocaleString()
+    const uploadedFiles = pdfFiles.map((file) => ({
+      id: `survey-upload-${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: file.name,
+      status: "PDF uploaded",
+      href: URL.createObjectURL(file),
+      fileName: file.name,
+      fileSize: formatFileSize(file.size),
+      fileType: ".pdf",
+      uploadedAt,
+      source: "Post-survey upload",
+      note: "Uploaded after the survey for review in the survey reports workspace.",
+    }))
+
+    setSurveyReportUploads((prev) => [...uploadedFiles, ...prev])
+    event.target.value = ""
+  }
+
+  const handleSubmitSurveyUpload = (itemId?: string) => {
+    if (!itemId) return
+
+    setSurveyReportUploads((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              status: "Submitted",
+              note: "Submitted from the survey reports workspace for follow-up review.",
+            }
+          : item
+      )
+    )
   }
 
   const handleAssignDialogOpenChange = (nextOpen: boolean) => {
@@ -674,6 +922,57 @@ export default function UserDetailsPage() {
   const kitchenRoomLength = formatEligibilityFieldValue(eligibilityData, "kitchenRoomLengthM")
   const bathroomRoomWidth = formatEligibilityFieldValue(eligibilityData, "bathroomRoomWidthM")
   const previousProposalDetails = formatEligibilityFieldValue(eligibilityData, "previousProposalDetails")
+  const surveyDateTimeValue = eligibilityData
+    ? getFirstStringValue(eligibilityData, [
+        ["surveyDateTime"],
+        ["survey", "dateTime"],
+        ["survey", "scheduledAt"],
+        ["survey", "startsAt"],
+        ["consultationDateTime"],
+        ["consultation", "dateTime"],
+        ["consultation", "scheduledAt"],
+        ["consultation", "startsAt"],
+        ["appointmentAt"],
+        ["appointment", "dateTime"],
+        ["appointment", "scheduledAt"],
+        ["schedule", "scheduledAt"],
+        ["schedule", "dateTime"],
+        ["scheduledAt"],
+      ])
+    : undefined
+  const surveyDateValue = eligibilityData
+    ? getFirstStringValue(eligibilityData, [
+        ["surveyDate"],
+        ["survey", "date"],
+        ["consultationDate"],
+        ["consultation", "date"],
+        ["appointmentDate"],
+        ["appointment", "date"],
+        ["schedule", "date"],
+      ])
+    : undefined
+  const surveyTimeValue = eligibilityData
+    ? getFirstStringValue(eligibilityData, [
+        ["surveyTime"],
+        ["survey", "time"],
+        ["consultationTime"],
+        ["consultation", "time"],
+        ["appointmentTime"],
+        ["appointment", "time"],
+        ["schedule", "time"],
+      ])
+    : undefined
+  const surveyLocationValue = eligibilityData
+    ? getFirstStringValue(eligibilityData, [
+        ["surveyLocation"],
+        ["survey", "location"],
+        ["consultationLocation"],
+        ["consultation", "location"],
+        ["appointmentLocation"],
+        ["appointment", "location"],
+        ["schedule", "location"],
+      ])
+    : undefined
   
   const submissionApplicantRows = eligibilityData
     ? [
@@ -761,6 +1060,67 @@ export default function UserDetailsPage() {
   const bathroomDimensionsAnswered = formatDisplayValue(formatEligibilityFieldValue(eligibilityData, "bathroomRoomLengthM")) !== "-" || formatDisplayValue(bathroomRoomWidth) !== "-"
   const declarationsCompleted = eligibilityData?.completionStatus.steps.some((step) => step.completed && (step.label.toLowerCase().includes("declaration") || step.key.toLowerCase().includes("declaration"))) ?? false
   const complianceDocumentsComplete = [gasSafetyCertificate, electricalReportEicr, epcAvailable].every((value) => value === "Yes")
+  const surveyTimestamp = getScheduleTimestamp(surveyDateTimeValue, surveyDateValue, surveyTimeValue)
+  const hasSurveyContext = dimensionsCompleted || anyDrawingAvailable || surveyReportUploads.length > 0
+  const surveyFallbackTimestamp = hasSurveyContext ? eligibilityData?.updatedAt ?? eligibilityData?.createdAt : undefined
+  const mockBookedSurvey = {
+    date: "10 May 2026",
+    time: "10:30",
+    location: "E6 2RP",
+  }
+  const surveyDateDisplay = surveyTimestamp !== null
+    ? formatDateValue(new Date(surveyTimestamp).toISOString())
+    : surveyDateValue
+      ? formatDateValue(surveyDateValue)
+      : formatDateValue(surveyFallbackTimestamp) !== "-"
+        ? formatDateValue(surveyFallbackTimestamp)
+        : mockBookedSurvey.date
+  const surveyTimeDisplay = surveyTimestamp !== null
+    ? formatTimeValue(new Date(surveyTimestamp).toISOString())
+    : surveyTimeValue
+      ? formatTimeValue(surveyTimeValue)
+      : formatTimeValue(surveyFallbackTimestamp) !== "-"
+        ? formatTimeValue(surveyFallbackTimestamp)
+        : mockBookedSurvey.time
+  const surveyLocationDisplay = surveyLocationValue ?? (siteAddress !== "-" ? siteAddress : mockBookedSurvey.location)
+  const applicationApplicantName = applicationProject?.user?.fullName?.trim()
+    ? applicationProject.user.fullName.trim()
+    : formatDisplayValue(applicationProject?.user?.email)
+  const applicationApplicantEmail = formatDisplayValue(applicationProject?.user?.email)
+  const applicationApplicantPhone = formatDisplayValue(applicationProject?.user?.phoneNumber)
+  const applicationLocationValue = applicationProject
+    ? getFirstStringValue(applicationProject, [
+        ["siteAddress"],
+        ["fullAddress"],
+        ["address"],
+        ["location"],
+        ["property", "address"],
+        ["property", "siteAddress"],
+        ["application", "siteAddress"],
+        ["application", "address"],
+        ["project", "siteAddress"],
+        ["project", "address"],
+      ])
+    : undefined
+  const applicationPostcodeValue = applicationProject
+    ? getFirstStringValue(applicationProject, [
+        ["postcode"],
+        ["zipCode"],
+        ["property", "postcode"],
+        ["application", "postcode"],
+        ["project", "postcode"],
+      ])
+    : undefined
+  const surveyApplicantNameDisplay = applicationApplicantName !== "-" ? applicationApplicantName : applicantName
+  const surveyApplicantEmailDisplay = applicationApplicantEmail !== "-" ? applicationApplicantEmail : applicantEmail
+  const surveyApplicantPhoneDisplay = applicationApplicantPhone !== "-" ? applicationApplicantPhone : applicantPhone
+  const surveyApplicationLocationDisplay = formatFullLocation(
+    applicationLocationValue ?? siteAddress,
+    applicationPostcodeValue ?? postcode
+  )
+  const surveyFullLocationDisplay = surveyApplicationLocationDisplay !== "-"
+    ? surveyApplicationLocationDisplay
+    : formatFullLocation(surveyLocationDisplay, applicationPostcodeValue ?? postcode)
 
   const triggerRoadmapItems = [
     {
@@ -962,6 +1322,49 @@ export default function UserDetailsPage() {
     { label: "Photos", status: hasEligibilityResource(photographsUrl) ? "Provided" : "Awaiting Response", href: typeof photographsUrl === "string" ? photographsUrl : undefined, fileType: ".jpg" },
   ];
 
+   const surveyReportDrawingFiles: BriefcaseDocumentItem[] = [
+    {
+      label: "Site plan",
+      status: "PDF linked",
+      href: typeof sitePlanUrl === "string" ? sitePlanUrl : undefined,
+      fileName: typeof sitePlanUrl === "string" ? getFileNameFromHref(sitePlanUrl) : undefined,
+      fileType: typeof sitePlanUrl === "string" ? getFileTypeLabel(sitePlanUrl) : ".pdf",
+      source: "Eligibility resource",
+      note: "Open the site plan used during the survey and planning review.",
+    },
+    {
+      label: "Measured survey drawings",
+      status: "PDF linked",
+      href: typeof additionalDrawingsUrl === "string" ? additionalDrawingsUrl : undefined,
+      fileName: typeof additionalDrawingsUrl === "string" ? getFileNameFromHref(additionalDrawingsUrl) : undefined,
+      fileType: typeof additionalDrawingsUrl === "string" ? getFileTypeLabel(additionalDrawingsUrl) : ".pdf",
+      source: "Eligibility resource",
+      note: "Includes the drawing pack captured from the latest survey information.",
+    }
+  ]
+  const surveyReportLinkedFiles: BriefcaseDocumentItem[] = [
+    ...surveyReportDrawingFiles.filter((item) => item.href),
+    {
+      label: "HMO Survey Crib Sheet",
+      status: "DOCX linked",
+      href: "/survey-files/wolseley-avenue-e6-hmo-survey-crib-sheet-v3.docx",
+      previewHref: "/survey-files/previews/wolseley-avenue-e6-hmo-survey-crib-sheet-v3.pdf",
+      fileName: "Wolseley Avenue E6 - HMO Survey Crib Sheet v3.docx",
+      fileType: ".docx",
+      note: "Linked local survey crib sheet for the booked Wolseley Avenue survey.",
+    },
+    {
+      label: "Project Survey and Feasibility Pack",
+      status: "DOCX linked",
+      href: "/survey-files/wolseley-avenue-e6-project-survey-and-feasibility-pack-v3-copy.docx",
+      previewHref: "/survey-files/previews/wolseley-avenue-e6-project-survey-and-feasibility-pack-v3-copy.pdf",
+      fileName: "Wolseley Avenue E6 - Project Survey and Feasibility Pack - v3 - Copy.docx",
+      fileType: ".docx",
+      note: "Linked local feasibility pack for the booked Wolseley Avenue survey.",
+    },
+  ]
+  const surveyReportUploadedPdfFiles = surveyReportUploads.filter((item) => isPdfDocument(item.fileName ?? item.href))
+
   const statusSummaryItems = [
     { label: "Gas Safety Certificate (CP12)", status: gasSafetyCertificate === "Yes" ? "Received" : gasSafetyCertificate === "No" ? "Missing" : "Pending Verification", fileType: ".pdf" },
     { label: "Electrical Report (EICR)", status: electricalReportEicr === "Yes" ? "Received" : electricalReportEicr === "No" ? "Missing" : "Pending Verification", fileType: ".pdf" },
@@ -1040,7 +1443,7 @@ export default function UserDetailsPage() {
           <div className="bg-white rounded-2xl border shadow-sm p-6">
             <div className="mb-6">
               <h3 className="text-lg font-bold text-slate-900">Triggers and Pending Documents</h3>
-              <p className="mt-1 text-sm text-slate-500">Separate cards for each category below the roadmap.</p>
+              <p className="mt-1 text-sm text-slate-500">Separate cards for each category below the roadmap, including a survey reports workspace.</p>
             </div>
 
             <div className="space-y-4">
@@ -1137,6 +1540,232 @@ export default function UserDetailsPage() {
                   </div>
                 ) : null
               )}
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                  <div>
+                    <p className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 ring-1 ring-slate-200">
+                      Survey Reports
+                    </p>
+                    <h4 className="text-sm font-bold text-slate-900">Survey files and booked survey details</h4>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Click Preview to open the popup and view the document content.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={16} className="text-blue-600" />
+                      <p className="text-sm font-bold text-slate-900">Application and Survey Details</p>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Applicant Name</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{surveyApplicantNameDisplay}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Applicant Email</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900 break-all">{surveyApplicantEmailDisplay}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Applicant Phone</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{surveyApplicantPhoneDisplay}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Survey Date</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{surveyDateDisplay}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Survey Time</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{surveyTimeDisplay}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Application Location</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{surveyFullLocationDisplay}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">Linked Survey Files</p>
+                        <p className="mt-1 text-xs text-slate-500">Survey plans and document files linked to this booked survey.</p>
+                      </div>
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700">
+                        {surveyReportLinkedFiles.length} linked
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {surveyReportLinkedFiles.length > 0 ? (
+                        surveyReportLinkedFiles.map((item) => (
+                        <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-1 truncate text-xs text-slate-500">
+                                {item.fileName ?? "No linked file yet"}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                                <span className={`rounded-full px-2.5 py-1 font-semibold ${item.href ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                  {item.status}
+                                </span>
+                                <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-600 ring-1 ring-slate-200">
+                                  {item.fileType ?? "-"}
+                                </span>
+                                {item.source ? (
+                                  <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-600 ring-1 ring-slate-200">
+                                    {item.source}
+                                  </span>
+                                ) : null}
+                              </div>
+                             
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleViewDocument(item)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                              >
+                                <Eye size={13} />
+                                Preview
+                              </button>
+                              {item.href ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDocument(item)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                                >
+                                  <ExternalLink size={13} />
+                                  Open
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                        ))
+                      ) : (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                          No linked survey files available yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">Post-Survey PDF Uploads</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Upload the survey files for {surveyFullLocationDisplay} from {surveyDateDisplay}. Multiple files are allowed.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenSurveyUpload}
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                      >
+                        <Upload size={13} />
+                        Upload PDFs
+                      </button>
+                    </div>
+
+                    <input
+                      ref={surveyUploadInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,application/pdf"
+                      onChange={handleSurveyReportUpload}
+                      className="hidden"
+                    />
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-semibold text-slate-500">Expected files:</p>
+                      <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                        Site measurement
+                      </span>
+                      <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                        Original layout
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {surveyReportUploadedPdfFiles.length > 0 ? (
+                        surveyReportUploadedPdfFiles.map((item, index) => (
+                          <div
+                            key={`${item.fileName ?? item.label}-${item.uploadedAt ?? index}`}
+                            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-slate-900">{item.fileName ?? item.label}</p>
+                                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-semibold text-emerald-700">
+                                    {item.status}
+                                  </span>
+                                  {item.fileType ? (
+                                    <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-600 ring-1 ring-slate-200">
+                                      {item.fileType}
+                                    </span>
+                                  ) : null}
+                                  {item.fileSize ? (
+                                    <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-slate-600 ring-1 ring-slate-200">
+                                      {item.fileSize}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="mt-2 text-xs text-slate-500">
+                                  Uploaded {item.uploadedAt ?? "-"} by Agent X
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewDocument(item)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                                >
+                                  <Eye size={13} />
+                                  Preview
+                                </button>
+                                {item.status !== "Submitted" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSubmitSurveyUpload(item.id)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+                                  >
+                                    <Send size={13} />
+                                    Submit to CAD Department
+                                  </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-700">
+                                    <CheckCircle size={13} />
+                                    Submitted
+                                  </span>
+                                )}
+                                {item.href ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDocument(item)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                                  >
+                                    <ExternalLink size={13} />
+                                    Open
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                          No post-survey PDF documents uploaded yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1816,7 +2445,7 @@ export default function UserDetailsPage() {
       </Dialog>
 
       <Dialog open={!!viewingDocument} onOpenChange={() => setViewingDocument(null)}>
-        <DialogContent className="max-w-xl p-0 overflow-hidden">
+        <DialogContent className="w-[99vw] max-w-7xl p-0 overflow-hidden">
           <div className="bg-white max-h-[92vh] flex flex-col">
             <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
@@ -1833,69 +2462,77 @@ export default function UserDetailsPage() {
               </button>
             </div>
             {viewingDocument ? (
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase text-slate-400">
-                      Document
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {viewingDocument.label}
+              <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
+                {viewingDocument.previewHref?.endsWith(".html") ? (
+                  <div className="overflow-hidden rounded-2xl border bg-slate-50 shadow-sm">
+                    <iframe
+                      title={viewingDocument.label}
+                      src={viewingDocument.previewHref}
+                      className="h-[80vh] w-full bg-white"
+                    />
+                  </div>
+                ) : viewingDocument.previewHref?.endsWith(".pdf") ? (
+                  <div className="overflow-hidden rounded-2xl border bg-slate-50 shadow-sm">
+                    <object
+                      data={getPdfPreviewSrc(viewingDocument.previewHref)}
+                      type="application/pdf"
+                      className="h-[80vh] w-full bg-white"
+                    >
+                      <iframe
+                        title={viewingDocument.label}
+                        src={getPdfPreviewSrc(viewingDocument.previewHref)}
+                        className="h-[80vh] w-full bg-white"
+                      />
+                    </object>
+                  </div>
+                ) : viewingDocument.previewHref ? (
+                  <div className="rounded-2xl border bg-white shadow-sm">
+                    <div className="max-h-[80vh] overflow-y-auto px-5 py-4">
+                      {documentPreviewLoading ? (
+                        <p className="text-sm text-slate-500">Loading preview...</p>
+                      ) : documentPreviewError ? (
+                        <p className="text-sm text-rose-600">{documentPreviewError}</p>
+                      ) : (
+                        <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
+                          {documentPreviewText}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+                ) : viewingDocument.href && viewingDocument.fileType === ".pdf" ? (
+                  <div className="overflow-hidden rounded-2xl border bg-slate-50 shadow-sm">
+                    <object
+                      data={getPdfPreviewSrc(viewingDocument.href)}
+                      type="application/pdf"
+                      className="h-[80vh] w-full bg-white"
+                    >
+                      <iframe
+                        title={viewingDocument.label}
+                        src={getPdfPreviewSrc(viewingDocument.href)}
+                        className="h-[80vh] w-full bg-white"
+                      />
+                    </object>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border bg-slate-50 p-5 shadow-sm">
+                    <p className="text-sm text-slate-700">
+                      {viewingDocument.note ??
+                        "This document does not have an in-app preview yet. Use Open to access the original file when available."}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase text-slate-400">
-                      Status
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {viewingDocument.status}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase text-slate-400">
-                      File Name
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {viewingDocument.fileName ?? "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase text-slate-400">
-                      File Type
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {viewingDocument.fileType ?? "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase text-slate-400">
-                      Source
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {viewingDocument.source ?? "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase text-slate-400">
-                      Uploaded At
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {viewingDocument.uploadedAt ?? "-"}
-                    </p>
-                  </div>
-                </div>
-                <div className="rounded-xl border bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Workspace Note
-                  </p>
-                  <p className="mt-2 text-sm text-slate-700">
-                    {viewingDocument.note ??
-                      "This workspace currently has document metadata for this item. When a direct file link is available, the View action opens the document in a new tab."}
-                  </p>
-                </div>
+                )}
               </div>
             ) : null}
             <div className="px-6 py-4 border-t bg-slate-50 flex items-center justify-end gap-3">
+              {viewingDocument?.href ? (
+                <button
+                  onClick={() => handleOpenDocument(viewingDocument)}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <ExternalLink size={14} />
+                  Open Original
+                </button>
+              ) : null}
               <button
                 onClick={() => setViewingDocument(null)}
                 className="rounded-lg px-4 py-2 text-sm font-semibold border bg-white hover:bg-slate-50 text-slate-700"
