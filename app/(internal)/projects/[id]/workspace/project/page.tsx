@@ -573,6 +573,7 @@ export default function UserDetailsPage() {
   const [currentStageId, setCurrentStageId] = useState(defaultWorkspaceRoadmap.currentStageId)
   const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
   const [applicationProject, setApplicationProject] = useState<ApplicationProject | null>(null)
+  const [councilOfficerReportReceived, setCouncilOfficerReportReceived] = useState<"yes" | "no" | null>(null)
   const [eligibilityLoading, setEligibilityLoading] = useState(true)
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const [journeyFieldActions, setJourneyFieldActions] = useState<Record<string, string>>({})
@@ -752,6 +753,12 @@ export default function UserDetailsPage() {
     if (action.targetSection) setActiveSection(action.targetSection)
     const nextHref = resolveRoadmapHref(action.hrefTemplate, projectId)
     if (nextHref) router.push(nextHref)
+  }
+
+  const handleProceedToFinalSubmission = () => {
+    const councilSubmissionStage = roadmapStages.find((stage) => stage.id === "council-submission")
+    if (!councilSubmissionStage) return
+    openStage(councilSubmissionStage)
   }
 
   const handleRequestDocuments = () => {
@@ -1364,6 +1371,117 @@ export default function UserDetailsPage() {
     },
   ]
   const surveyReportUploadedPdfFiles = surveyReportUploads.filter((item) => isPdfDocument(item.fileName ?? item.href))
+  const councilReadySubmissionPackItems: BriefcaseDocumentItem[] = [
+    {
+      label: "Application Form Name",
+      status: "Ready",
+      href: "/council-submission-pack/g5750form004-england-en.pdf",
+      fileName: "G5750Form004_england_en.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Council-ready form included in the final submission pack.",
+    },
+    {
+      label: "Newham Council Officer Report",
+      status: "Ready",
+      href: "/council-submission-pack/newham-council-officer-report-2.pdf",
+      fileName: "Newham council officer report 2.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Council officer report included in the final submission pack.",
+    },
+    {
+      label: "Strategic Flood Risk Assessment",
+      status: "Ready",
+      href: "/council-submission-pack/newham-level-2-strategic-flood-risk-assessment.pdf",
+      fileName: "Newham_Level_2_Strategic_Flood_Risk_Assessment.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Flood risk assessment included in the final submission pack.",
+    },
+    {
+      label: "Arboricultural Report",
+      status: "Ready",
+      href: "/council-submission-pack/arboricultural-report.pdf",
+      fileName: "Arboricultural Report.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Arboricultural report included in the final submission pack.",
+    },
+    {
+      label: "Gas Safety Certificate",
+      status: "Ready",
+      href: "/council-submission-pack/gas-safety-certificate.pdf",
+      fileName: "Gas Safety Certificate.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Gas safety certificate included in the final submission pack.",
+    },
+    {
+      label: "EICR Sample Report",
+      status: "Ready",
+      href: "/council-submission-pack/eicr-sample-report.pdf",
+      fileName: "EICR-Sample-Report.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "EICR report included in the final submission pack.",
+    },
+    {
+      label: "Energy Performance Certificate",
+      status: "Ready",
+      href: "/council-submission-pack/energy-performance-certificate.pdf",
+      fileName: "Energy Performance Certificate.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Energy performance certificate included in the final submission pack.",
+    },
+    {
+      label: "Original Layout - New Walls",
+      status: "Ready",
+      href: "/council-submission-pack/original-layout-new-walls-21-04-26.pdf",
+      fileName: "ORIGINAL LAYOUT-NEW WALLS 21.04.26 (1).pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Original layout drawing included in the final submission pack.",
+    },
+    {
+      label: "Proposed Layout V5",
+      status: "Ready",
+      href: "/council-submission-pack/proposed-layout-v5.pdf",
+      fileName: "PROPOSED LAYOUT V5.pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Proposed layout V5 included in the final submission pack.",
+    },
+    {
+      label: "Proposed Layout 21.04.26",
+      status: "Ready",
+      href: "/council-submission-pack/proposed-layout-21-04-26.pdf",
+      fileName: "PROPOSED LAYOUT 21.04.26 (1) (1).pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Proposed layout revision dated 21.04.26 included in the final submission pack.",
+    },
+    {
+      label: "Original Site Layout",
+      status: "Ready",
+      href: "/council-submission-pack/ai4p-survey.pdf",
+      fileName: "AI4P SURVEY (1).pdf",
+      fileType: ".pdf",
+      source: "Council ready submission pack",
+      note: "Survey report included in the final submission pack.",
+    },
+    {
+      label: "Site Visited Data",
+      status: "Ready",
+      href: "/survey-files/wolseley-avenue-e6-hmo-survey-crib-sheet-v3.docx",
+      previewHref: "/survey-files/previews/wolseley-avenue-e6-hmo-survey-crib-sheet-v3.pdf",
+      fileName: "Wolseley Avenue E6 - HMO Survey Crib Sheet v3.docx",
+      fileType: ".docx",
+      source: "Council ready submission pack",
+      note: "Survey crib sheet included in the final submission pack.",
+    },
+  ]
 
   const statusSummaryItems = [
     { label: "Gas Safety Certificate (CP12)", status: gasSafetyCertificate === "Yes" ? "Received" : gasSafetyCertificate === "No" ? "Missing" : "Pending Verification", fileType: ".pdf" },
@@ -1380,16 +1498,16 @@ export default function UserDetailsPage() {
   const ownershipStatusDisplay = formatDisplayValue(ownershipStatus).toLowerCase()
   const isLeaseholdCase = ownershipStatusDisplay.includes("lease")
   const finalReviewChecklistGroups: FinalReviewChecklistGroup[] = [
-    { label: "Documents", items: CHECKLIST_DOCUMENTS.map((item) => { let status: ReviewChecklistStatus = "pending"; return { label: item, status } }) },
-    { label: "Compliance", items: CHECKLIST_COMPLIANCE.map((item) => { let status: ReviewChecklistStatus = "pending"; return { label: item, status } }) },
-    { label: "Drawings", items: CHECKLIST_DRAWINGS.map((item) => { let status: ReviewChecklistStatus = "pending"; return { label: item, status } }) },
+    { label: "Documents", items: CHECKLIST_DOCUMENTS.map((item) => ({ label: item, status: "completed" as ReviewChecklistStatus })) },
+    { label: "Compliance", items: CHECKLIST_COMPLIANCE.map((item) => ({ label: item, status: "completed" as ReviewChecklistStatus })) },
+    { label: "Drawings", items: CHECKLIST_DRAWINGS.map((item) => ({ label: item, status: "completed" as ReviewChecklistStatus })) },
   ]
   
   const finalReviewChecklistItems = finalReviewChecklistGroups.flatMap((group) => group.items)
   const completedFinalReviewChecklistItems = finalReviewChecklistItems.filter((item) => item.status === "completed")
   const inProgressFinalReviewChecklistItems = finalReviewChecklistItems.filter((item) => item.status === "in-progress")
   const pendingFinalReviewChecklistItems = finalReviewChecklistItems.filter((item) => item.status === "pending")
-  const councilSubmissionItems = [`Council: ${councilName}`, `Submission pack: ${allRequiredDocsCompleted ? "Ready" : "Incomplete"}`, `Planning reference: ${councilReference}`]
+  const councilSubmissionItems: string[] = []
   
   const journeySteps: JourneyStep[] = roadmapStages.map((stage): JourneyStep =>
     stage.id === "checklist" ? { ...stage, calloutLabel: "", desc: "" }
@@ -1397,7 +1515,7 @@ export default function UserDetailsPage() {
     : stage.id === "eligibility-check" && eligibilityData ? { ...stage, calloutLabel: eligibilityData.completionStatus.isCompleted ? "Agent Z Response to you" : undefined, details: pendingEligibilitySteps, detailsLabel: "Pending eligibility sections", desc: eligibilityData.completionStatus.isCompleted ? "Newham HMO licensing review ready for verification." : `Eligibility form is ${eligibilityData.completionStatus.percentage}% complete.`, calloutTypewriterText: eligibilityData.completionStatus.isCompleted ? eligibilityReviewBrief : undefined, calloutStyle: eligibilityData.completionStatus.isCompleted ? "eligibility" : undefined, hideNextLabel: eligibilityData.completionStatus.isCompleted }
     : stage.id === "payments-generate-quote" ? { ...stage, desc: "Review the subscription payment details for this project." }
     : stage.id === "final-review-check" ? { ...stage, desc: "Review the checklist, uploaded documents, and eligibility answers before submission." }
-    : stage.id === "council-submission" ? { ...stage, detailGroups: [{ label: "Council Submission", items: councilSubmissionItems }] }
+    : stage.id === "council-submission" ? { ...stage, detailGroups: [] }
     : stage
   )
   
@@ -2033,8 +2151,58 @@ export default function UserDetailsPage() {
         <div className="max-w-[1600px] mx-auto px-6 lg:px-8 mt-6">
           <div className="bg-white rounded-2xl border shadow-sm p-6">
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-slate-900">Final Review and Check</h3>
-              <p className="mt-1 text-sm text-slate-500">Review the full checklist and the submitted eligibility data before council submission.</p>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-lg font-bold text-slate-900">Final Review and Check</h3>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      councilOfficerReportReceived === "yes"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}>
+                      {councilOfficerReportReceived === "yes"
+                        ? "Newham Council Report Received"
+                        : "Awaiting Newham Council Report"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">Review the full checklist and the submitted eligibility data before council submission.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Council Officer Report Received?
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-4">
+                    <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={councilOfficerReportReceived === "yes"}
+                        onChange={() => setCouncilOfficerReportReceived((prev) => prev === "yes" ? null : "yes")}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Yes
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={councilOfficerReportReceived === "no"}
+                        onChange={() => setCouncilOfficerReportReceived((prev) => prev === "no" ? null : "no")}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      No
+                    </label>
+                  </div>
+                  {councilOfficerReportReceived === "yes" ? (
+                    <button
+                      type="button"
+                      onClick={handleProceedToFinalSubmission}
+                      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                    >
+                      <CheckCircle size={14} />
+                      Proceed to Final Submission
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
             {eligibilityData ? (
               <div className="grid gap-4 xl:grid-cols-3">
@@ -2080,12 +2248,68 @@ export default function UserDetailsPage() {
                   <h2 className="text-lg font-bold text-slate-900">Application Form Submission</h2>
                 </div>
                 {eligibilityData ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <OverviewCard title="Applicant Details" icon={<User size={14} className="text-blue-600" />}>
-                      <div className="space-y-2">{submissionApplicantRows.map((row) => (<InfoPair key={row.label} label={row.label} value={row.value} />))}</div>
-                    </OverviewCard>
-                    <OverviewCard title="Property Details" icon={<Home size={14} className="text-emerald-600" />}>
-                       <div className="space-y-2">{submissionPropertyRows.map((row) => (<InfoPair key={row.label} label={row.label} value={row.value} />))}</div>
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <OverviewCard title="Applicant Details" icon={<User size={14} className="text-blue-600" />}>
+                        <div className="space-y-2">{submissionApplicantRows.map((row) => (<InfoPair key={row.label} label={row.label} value={row.value} />))}</div>
+                      </OverviewCard>
+                      <OverviewCard title="Property Details" icon={<Home size={14} className="text-emerald-600" />}>
+                         <div className="space-y-2">{submissionPropertyRows.map((row) => (<InfoPair key={row.label} label={row.label} value={row.value} />))}</div>
+                      </OverviewCard>
+                    </div>
+
+                    <OverviewCard title="Council Ready Submission Pack" icon={<FileText size={14} className="text-blue-600" />}>
+                      <div className="space-y-3">
+                        {councilReadySubmissionPackItems.map((item) => (
+                          <div key={item.label} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                                <p className="mt-1 truncate text-xs text-slate-500">{item.fileName ?? "-"}</p>
+                                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-semibold text-emerald-700">
+                                    {item.status}
+                                  </span>
+                                  {item.fileType ? (
+                                    <span className="rounded-full bg-slate-50 px-2.5 py-1 font-semibold text-slate-600 ring-1 ring-slate-200">
+                                      {item.fileType}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewDocument(item)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                                >
+                                  <Eye size={13} />
+                                  Preview
+                                </button>
+                                {item.href ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDocument(item)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                                  >
+                                    <ExternalLink size={13} />
+                                    Open
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex justify-end pt-2">
+                          <button
+                            type="button"
+                            onClick={handleProceedToFinalSubmission}
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+                          >
+                            Submit to Council
+                          </button>
+                        </div>
+                      </div>
                     </OverviewCard>
                   </div>
                 ) : (<LiveDataPlaceholder title="Submission data not connected" message="This section will show the submitted application details once a live project form endpoint is connected." />)}
@@ -2585,7 +2809,7 @@ function OverviewCard({ title, icon, children }: { title: string; icon: React.Re
 }
 
 function StatusReviewRow({ label, status }: { label: string; status: ReviewChecklistStatus }) {
-  const statusStyles = status === "completed" ? { container: "border-emerald-200 bg-emerald-50/80", text: "text-emerald-900", badge: "bg-emerald-100 text-emerald-700", label: "Completed" } : status === "in-progress" ? { container: "border-amber-200 bg-amber-50/80", text: "text-amber-900", badge: "bg-amber-100 text-amber-700", label: "In Progress" } : { container: "border-rose-200 bg-rose-50/80", text: "text-rose-900", badge: "bg-rose-100 text-rose-700", label: "Pending" }
+  const statusStyles = status === "completed" ? { container: "border-emerald-200 bg-emerald-50/80", text: "text-emerald-900", badge: "bg-emerald-100 text-emerald-700", label: "Checked" } : status === "in-progress" ? { container: "border-amber-200 bg-amber-50/80", text: "text-amber-900", badge: "bg-amber-100 text-amber-700", label: "In Progress" } : { container: "border-rose-200 bg-rose-50/80", text: "text-rose-900", badge: "bg-rose-100 text-rose-700", label: "Pending" }
   return (<div className={`rounded-lg border px-3 py-2.5 ${statusStyles.container}`}><div className="flex items-center justify-between gap-3"><p className={`text-sm font-medium ${statusStyles.text}`}>{label}</p><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusStyles.badge}`}>{statusStyles.label}</span></div></div>)
 }
 
