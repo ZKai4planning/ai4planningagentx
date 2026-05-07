@@ -101,68 +101,61 @@ const CHANNEL_CONFIG: Record<WorkspaceChatChannelId, ChannelConfig> = {
   },
 }
 
-const CHAT_SEED: WorkspaceChatStore = {
-  chat: [
-    {
-      id: "chat-1",
-      from: "client",
-      text: "Can we reduce the extension depth slightly?",
-      sentAt: "2026-04-25T10:24:00.000Z",
-    },
-    {
-      id: "chat-2",
-      from: "agent",
-      text: "Yes, that improves approval chances. I'll revise the drawings and resend.",
-      sentAt: "2026-04-25T10:41:00.000Z",
-    },
-    {
-      id: "chat-3",
-      from: "client",
-      text: "Great, also any concerns about the left boundary?",
-      sentAt: "2026-04-25T11:05:00.000Z",
-    },
-    {
-      id: "chat-4",
-      from: "agent",
-      text: "We'll keep 1m clearance. That satisfies the council's party wall rules.",
-      sentAt: "2026-04-25T11:18:00.000Z",
-    },
-  ],
-  "customer-chat": [
-    {
-      id: "customer-chat-1",
-      from: "client",
-      text: "I have uploaded the biodiversity report draft. Please check if this is acceptable.",
-      sentAt: "2026-04-25T10:10:00.000Z",
-    },
-    {
-      id: "customer-chat-2",
-      from: "agent",
-      text: "Received. I will validate the report and share feedback shortly.",
-      sentAt: "2026-04-25T10:22:00.000Z",
-    },
-  ],
-  "agent-y-chat": [
-    {
-      id: "agent-y-chat-1",
-      from: "agentY",
-      text: "Please share the updated site plan and ownership certificate.",
-      sentAt: "2026-04-25T09:42:00.000Z",
-    },
-    {
-      id: "agent-y-chat-2",
-      from: "agentX",
-      text: "Acknowledged. I will upload both after validating the customer files.",
-      sentAt: "2026-04-25T09:55:00.000Z",
-    },
-  ],
-}
-
 function cloneSeedStore(): WorkspaceChatStore {
   return {
-    chat: [...CHAT_SEED.chat],
-    "customer-chat": [...CHAT_SEED["customer-chat"]],
-    "agent-y-chat": [...CHAT_SEED["agent-y-chat"]],
+    chat: [],
+    "customer-chat": [
+      {
+        id: "customer-chat-1",
+        from: "client",
+        text: "Hi Agent X, I have uploaded the site plan and proposed drawings. Can you confirm what is still pending?",
+        sentAt: "2026-05-07T09:12:00.000Z",
+      },
+      {
+        id: "customer-chat-2",
+        from: "agent",
+        text: "Thanks, I can see those files. We still need the application form and one supporting compliance document before I can move this to the next review step.",
+        sentAt: "2026-05-07T09:16:00.000Z",
+      },
+      {
+        id: "customer-chat-3",
+        from: "client",
+        text: "Understood. I will upload the application form today. Can the compliance document be submitted after that?",
+        sentAt: "2026-05-07T09:18:00.000Z",
+      },
+      {
+        id: "customer-chat-4",
+        from: "agent",
+        text: "Yes. Upload the application form first, then I will issue the updated quotation and guide you through the remaining document requirement.",
+        sentAt: "2026-05-07T09:21:00.000Z",
+      },
+    ],
+    "agent-y-chat": [
+      {
+        id: "agent-y-chat-1",
+        from: "agentY",
+        text: "I have reviewed the latest drawing pack. Please confirm whether the customer has sent the final application form yet.",
+        sentAt: "2026-05-07T09:24:00.000Z",
+      },
+      {
+        id: "agent-y-chat-2",
+        from: "agentX",
+        text: "Not yet. The customer confirmed they will upload it today, and I am still waiting on one supporting compliance document.",
+        sentAt: "2026-05-07T09:27:00.000Z",
+      },
+      {
+        id: "agent-y-chat-3",
+        from: "agentY",
+        text: "Understood. Once the form is uploaded, send me the updated quotation and I will continue the next review step.",
+        sentAt: "2026-05-07T09:30:00.000Z",
+      },
+      {
+        id: "agent-y-chat-4",
+        from: "agentX",
+        text: "Will do. I will update the cart, generate the quotation, and share the completed pack with you once the customer uploads the remaining file.",
+        sentAt: "2026-05-07T09:33:00.000Z",
+      },
+    ],
   }
 }
 

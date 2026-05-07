@@ -4,7 +4,7 @@
 import CustomerJourney, { type JourneyStep } from "@/components/CustomerJourney"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
-import { useState, useEffect, useRef, type ChangeEvent } from "react"
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import axiosInstance from "@/lib/axiosinstance"
 import jsPDF from "jspdf";
 import {
@@ -99,6 +99,7 @@ type EligibilityResponse = {
 }
 
 type ApplicationUser = {
+  userId?: string
   fullName?: string
   email?: string
   phoneNumber?: string
@@ -106,6 +107,7 @@ type ApplicationUser = {
 
 type ApplicationProject = Record<string, unknown> & {
   projectId: string
+  userId?: string
   user?: ApplicationUser | null
 }
 
@@ -113,6 +115,44 @@ type ApplicationProjectsResponse = {
   success?: boolean
   message?: string
   data?: ApplicationProject[]
+}
+
+type ServiceCartItem = {
+  serviceItemId: string
+  serviceName?: string
+  payment?: number
+}
+
+type ServiceCartData = {
+  cartId: string
+  projectId: string
+  userId: string
+  totalServices?: number
+  totalPayment?: number
+  services?: ServiceCartItem[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+type ServiceCartResponse = {
+  success?: boolean
+  message?: string
+  data?: ServiceCartData
+}
+
+type ServiceCartUpdatePayload = {
+  cartId: string
+  userId: string
+  notes: string
+}
+
+type AddServiceCartPayload = {
+  projectId: string
+  userId: string
+  services: Array<{
+    serviceName: string
+    payment: number
+  }>
 }
 
 type EligibilityFieldKey = keyof typeof eligibilityFieldMappings
@@ -170,6 +210,27 @@ type GeneratedQuote = {
   createdAt: string;
   services: QuoteService[];
 };
+
+type GeneratedQuotationRecord = Record<string, unknown> & {
+  quotationId?: string
+  cartId?: string
+  totalPayment?: number
+  totalAmount?: number
+  amount?: number
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+  services?: ServiceCartItem[]
+}
+
+type GeneratedQuotationsResponse = {
+  success?: boolean
+  message?: string
+  data?: GeneratedQuotationRecord[] | {
+    quotations?: GeneratedQuotationRecord[]
+    items?: GeneratedQuotationRecord[]
+  }
+}
 
 // ... [Helper functions] ...
 const longEligibilityFieldKeys = new Set<EligibilityFieldKey>([
@@ -486,6 +547,67 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatPaymentAmount(amount?: number | null) {
+  const safeAmount = typeof amount === "number" && Number.isFinite(amount) ? amount : 0
+  return `${safeAmount} GBP`
+}
+
+function getGeneratedQuotationItems(payload?: GeneratedQuotationsResponse["data"]): GeneratedQuotationRecord[] {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.quotations)) return payload.quotations
+  if (Array.isArray(payload?.items)) return payload.items
+  return []
+}
+
+function mapGeneratedQuotationToQuote(
+  quotation: GeneratedQuotationRecord,
+  fallbackClientName: string
+): GeneratedQuote {
+  const rawServices = Array.isArray(quotation.services) ? quotation.services : []
+  const services: QuoteService[] = rawServices.map((service) => ({
+    id: service.serviceItemId,
+    title: service.serviceName?.trim() || "Unnamed service",
+    category: "Payment Stage",
+    amount: formatPaymentAmount(service.payment),
+    about: "Service loaded from generated quotation history.",
+    status: (service.payment ?? 0) > 0 ? "Ready" : "Pending payment",
+  }))
+
+  const totalAmount =
+    typeof quotation.totalPayment === "number"
+      ? quotation.totalPayment
+      : typeof quotation.totalAmount === "number"
+      ? quotation.totalAmount
+      : typeof quotation.amount === "number"
+      ? quotation.amount
+      : rawServices.reduce((sum, service) => sum + (service.payment ?? 0), 0)
+
+  const rawStatus = typeof quotation.status === "string" ? quotation.status.toLowerCase() : ""
+
+  return {
+    id:
+      (typeof quotation.quotationId === "string" && quotation.quotationId) ||
+      (typeof quotation.cartId === "string" && quotation.cartId) ||
+      `QUOTE-${quotation.createdAt ?? Date.now()}`,
+    clientName: fallbackClientName,
+    amount: formatPaymentAmount(totalAmount),
+    status: rawStatus === "sent" ? "Sent" : "Draft",
+    createdAt: quotation.createdAt ?? quotation.updatedAt ?? new Date().toISOString(),
+    services,
+  }
+}
+
+function mapServiceCartToQuoteServices(cart: ServiceCartData | null): QuoteService[] {
+  return (cart?.services ?? []).map((service) => ({
+    id: service.serviceItemId,
+    title: service.serviceName?.trim() || "Unnamed service",
+    category: "Payment Stage",
+    amount: formatPaymentAmount(service.payment),
+    about: "Service loaded from the payment-stage cart.",
+    status: (service.payment ?? 0) > 0 ? "Ready" : "Pending payment",
+  }))
+}
+
 function getFileNameFromHref(href?: string) {
   if (!href) return "-"
 
@@ -573,6 +695,13 @@ export default function UserDetailsPage() {
   const [currentStageId, setCurrentStageId] = useState(defaultWorkspaceRoadmap.currentStageId)
   const [eligibilityData, setEligibilityData] = useState<EligibilityData | null>(null)
   const [applicationProject, setApplicationProject] = useState<ApplicationProject | null>(null)
+  const [serviceCart, setServiceCart] = useState<ServiceCartData | null>(null)
+  const [cartLoading, setCartLoading] = useState(false)
+  const [cartError, setCartError] = useState<string | null>(null)
+  const [addServiceSubmitting, setAddServiceSubmitting] = useState(false)
+  const [addServiceError, setAddServiceError] = useState<string | null>(null)
+  const [quoteSubmitting, setQuoteSubmitting] = useState(false)
+  const [quoteSubmitError, setQuoteSubmitError] = useState<string | null>(null)
   const [councilOfficerReportReceived, setCouncilOfficerReportReceived] = useState<"yes" | "no" | null>(null)
   const [eligibilityLoading, setEligibilityLoading] = useState(true)
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
@@ -599,6 +728,13 @@ export default function UserDetailsPage() {
   const currentStepIndex = roadmapStages.findIndex((stage) => stage.id === currentStageId)
   const currentStep = currentStepIndex >= 0 ? currentStepIndex : 0
   const activeRoadmapStage = roadmapStages[currentStep]
+  const resolvedProjectUserId =
+    applicationProject?.userId?.trim() ||
+    applicationProject?.user?.userId?.trim() ||
+    null
+  const applicationApplicantName = applicationProject?.user?.fullName?.trim()
+    ? applicationProject.user.fullName.trim()
+    : formatDisplayValue(applicationProject?.user?.email)
 
   // ... [useEffects] ...
   useEffect(() => {
@@ -666,6 +802,56 @@ export default function UserDetailsPage() {
     void loadApplicationProject()
     return () => { active = false }
   }, [projectId])
+
+  const loadGeneratedQuotations = useCallback(async () => {
+    if (!projectId || !resolvedProjectUserId) {
+      setQuoteHistory([])
+      return
+    }
+
+    try {
+      const response = await axiosInstance.get<GeneratedQuotationsResponse>(
+        `/service-cart/${encodeURIComponent(projectId)}/quotations`,
+        {
+          params: {
+            projectId,
+            userId: resolvedProjectUserId,
+          },
+        }
+      )
+
+      const quotationItems = getGeneratedQuotationItems(response.data.data)
+      const currentCartHasGeneratedQuote = serviceCart?.cartId
+        ? quotationItems.some((quotation) => quotation.cartId === serviceCart.cartId)
+        : false
+
+      const generatedQuotes = quotationItems
+        .map((quotation) =>
+          mapGeneratedQuotationToQuote(
+            quotation,
+            applicationApplicantName !== "-" ? applicationApplicantName : "Customer"
+          )
+        )
+        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+
+      setQuoteHistory(generatedQuotes)
+      setQuoteGenerated(currentCartHasGeneratedQuote)
+
+      if (currentCartHasGeneratedQuote) {
+        setQuoteServices([])
+        setCartError(null)
+        setAddServiceError(null)
+      }
+    } catch (error) {
+      console.error("Failed to load generated quotations", error)
+      setQuoteHistory([])
+      setQuoteGenerated(false)
+    }
+  }, [applicationApplicantName, projectId, resolvedProjectUserId, serviceCart?.cartId])
+
+  useEffect(() => {
+    void loadGeneratedQuotations()
+  }, [loadGeneratedQuotations])
 
   useEffect(() => { setRoadmap(buildRoadmapWithEligibility(baseRoadmap, eligibilityData)) }, [baseRoadmap, eligibilityData])
   useEffect(() => { setActiveSection(selectedSection) }, [selectedSection])
@@ -1014,7 +1200,7 @@ export default function UserDetailsPage() {
   }
   
   const project = {
-    id: projectId ?? "Unknown", clientId: "-", clientName: applicantName, title: `Project ${projectId ?? "Unknown"}`,
+    id: projectId ?? "Unknown", clientId: resolvedProjectUserId ?? "-", clientName: applicantName, title: `Project ${projectId ?? "Unknown"}`,
     description: eligibilityData ? "Live project details derived from the connected eligibility record." : "No live project metadata connected yet.",
     service: purposeOfDevelopment, serviceType: "Mandatory HMO License", serviceNo: "-", stage: activeRoadmapStage?.label ?? "Unknown",
     location: siteAddress, postcode, status: eligibilityData?.status ?? "live_data_pending", createdDate: eligibilityData?.createdAt ?? "",
@@ -1090,9 +1276,6 @@ export default function UserDetailsPage() {
         ? formatTimeValue(surveyFallbackTimestamp)
         : mockBookedSurvey.time
   const surveyLocationDisplay = surveyLocationValue ?? (siteAddress !== "-" ? siteAddress : mockBookedSurvey.location)
-  const applicationApplicantName = applicationProject?.user?.fullName?.trim()
-    ? applicationProject.user.fullName.trim()
-    : formatDisplayValue(applicationProject?.user?.email)
   const applicationApplicantEmail = formatDisplayValue(applicationProject?.user?.email)
   const applicationApplicantPhone = formatDisplayValue(applicationProject?.user?.phoneNumber)
   const applicationLocationValue = applicationProject
@@ -1201,12 +1384,108 @@ export default function UserDetailsPage() {
     { id: "service-drawing-pack", title: "Drawing Review Pack", category: "Drawings", amount: "35 GBP", about: "Review and coordination for location plans, site plans, elevations, and proposed drawing outputs tied to the case.", status: anyDrawingAvailable ? "Ready" : "Awaiting drawings" },
   ]);
 
+  useEffect(() => {
+    let active = true
+
+    const loadServiceCart = async () => {
+      if (!projectId || !resolvedProjectUserId) {
+        setServiceCart(null)
+        setCartLoading(false)
+        setCartError(null)
+        return
+      }
+
+      setCartLoading(true)
+      setCartError(null)
+
+      try {
+        const response = await axiosInstance.get<ServiceCartResponse>(
+          `/service-cart/${encodeURIComponent(projectId)}`,
+          {
+            params: {
+              projectId,
+              userId: resolvedProjectUserId,
+            },
+          }
+        )
+
+        if (!active) return
+
+        const nextCart = response.data.data ?? null
+        setServiceCart(nextCart)
+        setQuoteServices(mapServiceCartToQuoteServices(nextCart))
+      } catch (error) {
+        if (!active) return
+        setServiceCart(null)
+        setCartError("Unable to load payment-stage services right now.")
+        console.error("Failed to fetch service cart", error)
+      } finally {
+        if (active) setCartLoading(false)
+      }
+    }
+
+    void loadServiceCart()
+    return () => { active = false }
+  }, [projectId, resolvedProjectUserId])
+
   const handleAddService = () => {
-    if (!newServiceName || !newServiceAmount) return;
-    const newService = { id: Date.now().toString(), title: newServiceName, category: "Custom", amount: `${newServiceAmount} GBP`, about: "User added service", status: "In progress" };
-    setQuoteServices((prev) => [...prev, newService]);
-    setNewServiceName("");
-    setNewServiceAmount("");
+    const serviceName = newServiceName.trim()
+    const payment = Number(newServiceAmount)
+
+    if (!serviceName || !Number.isFinite(payment) || payment <= 0 || !resolvedProjectUserId || !projectId) return
+
+    const addService = async () => {
+      setAddServiceSubmitting(true)
+      setAddServiceError(null)
+
+      try {
+        const payload: AddServiceCartPayload = {
+          projectId,
+          userId: resolvedProjectUserId,
+          services: [
+            {
+              serviceName,
+              payment,
+            },
+          ],
+        }
+
+        const createCartResponse = await axiosInstance.post<ServiceCartResponse>(
+          `/service-cart`,
+          payload
+        )
+
+        let nextCart = createCartResponse.data.data ?? null
+
+        if (!nextCart?.cartId) {
+          const response = await axiosInstance.get<ServiceCartResponse>(
+            `/service-cart/${encodeURIComponent(projectId)}`,
+            {
+              params: {
+                projectId,
+                userId: resolvedProjectUserId,
+              },
+            }
+          )
+
+          nextCart = response.data.data ?? null
+        }
+
+        setServiceCart(nextCart)
+        setQuoteGenerated(false)
+        setQuoteSubmitError(null)
+        setQuoteServices(mapServiceCartToQuoteServices(nextCart))
+        setNewServiceName("")
+        setNewServiceAmount("")
+      } catch (error) {
+        setAddServiceError("Unable to add the new service to the cart right now.")
+        console.error("Failed to add service to cart", error)
+      } finally {
+        setAddServiceSubmitting(false)
+      }
+    }
+
+    void addService()
   };
   
   const handleDeleteService = (id: string) => { setQuoteServices((prev) => prev.filter((service) => service.id !== id)); };
@@ -1245,10 +1524,45 @@ export default function UserDetailsPage() {
   quote.breakdown = quoteServices.map((service) => ({ label: service.title, amount: service.amount, pct: 25 }));
 
   const handleCreateQuote = () => {
-    const newQuote: GeneratedQuote = { id: `QUOTE-${Date.now()}`, clientName: applicantName, amount: quoteCartTotal, status: "Draft", createdAt: new Date().toISOString(), services: [...quoteServices] };
-    setQuoteHistory((prev) => [newQuote, ...prev]);
-    setQuoteGenerated(true);
-    setQuoteServices([]);
+    if (quoteServices.length === 0 || !projectId || !resolvedProjectUserId || !serviceCart?.cartId) return
+
+    const submitQuote = async () => {
+      setQuoteSubmitting(true)
+      setQuoteSubmitError(null)
+
+      try {
+        const payload: ServiceCartUpdatePayload = {
+          cartId: serviceCart.cartId,
+          userId: resolvedProjectUserId,
+          notes: "Quotation generated for final approval",
+        }
+
+        await axiosInstance.post(
+          `/service-cart/${encodeURIComponent(projectId)}/quotation`,
+          payload,
+          {
+            params: {
+              userId: resolvedProjectUserId,
+            },
+          }
+        )
+
+        await loadGeneratedQuotations()
+        setQuoteGenerated(true);
+        setServiceCart(null)
+        setQuoteServices([])
+        setCartError(null)
+        setAddServiceError(null)
+        setNotes((prev) => ["Quotation generated for final approval", ...prev])
+      } catch (error) {
+        setQuoteSubmitError("Unable to save the quotation details right now.")
+        console.error("Failed to update service cart", error)
+      } finally {
+        setQuoteSubmitting(false)
+      }
+    }
+
+    void submitQuote()
   };
 
   const handleViewQuote = (quote: GeneratedQuote) => { setViewingQuote(quote); };
@@ -2515,14 +2829,33 @@ export default function UserDetailsPage() {
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-600">Services Added to Cart</p>
-                      <p className="text-xs text-slate-500">Build the quote from document, compliance, drawing, and trigger-related services.</p>
+                      <p className="text-xs text-slate-500">
+                        {quoteGenerated
+                          ? "The current quote has already been generated. Add new services to start a fresh cart."
+                          : "Build the quote from document, compliance, drawing, and trigger-related services."}
+                      </p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${quoteGenerated ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{quoteStatusLabel}</span>
                   </div>
+                  {cartLoading ? (
+                    <p className="text-sm text-slate-500">Loading payment-stage services...</p>
+                  ) : cartError ? (
+                    <p className="text-sm text-rose-600">{cartError}</p>
+                  ) : addServiceError ? (
+                    <p className="text-sm text-rose-600">{addServiceError}</p>
+                  ) : quoteSubmitError ? (
+                    <p className="text-sm text-rose-600">{quoteSubmitError}</p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-3 mb-6">
-                  {quoteServices.map((service) => (
+                  {quoteServices.length === 0 && !cartLoading ? (
+                    <div className="rounded-xl border border-dashed bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                      {quoteGenerated
+                        ? "Quote already generated. Add new services below to create the next cart."
+                        : "No payment-stage services are available for this project yet."}
+                    </div>
+                  ) : quoteServices.map((service) => (
                     <div key={service.id} className="rounded-xl border bg-slate-50 px-4 py-4">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="min-w-0">
@@ -2547,7 +2880,7 @@ export default function UserDetailsPage() {
                   <div className="flex flex-col md:flex-row gap-3">
                     <input type="text" placeholder="Service name" value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                     <input type="number" placeholder="Amount" value={newServiceAmount} onChange={(e) => setNewServiceAmount(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                    <button type="button" onClick={handleAddService} className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700">Add</button>
+                    <button type="button" onClick={handleAddService} disabled={addServiceSubmitting || !projectId || !resolvedProjectUserId} className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${addServiceSubmitting || !projectId || !resolvedProjectUserId ? "cursor-not-allowed bg-blue-300" : "bg-blue-600 hover:bg-blue-700"}`}>{addServiceSubmitting ? "Adding..." : "Add"}</button>
                   </div>
                 </div>
 
@@ -2555,9 +2888,15 @@ export default function UserDetailsPage() {
                   <div><p className="text-sm font-semibold text-slate-900">Quote Total</p><p className="text-xs text-slate-500">Survey, gas, tree, documents, and drawings services included.</p></div>
                   <div className="flex items-center gap-3">
                     <p className="text-xl font-bold text-slate-900">{quoteCartTotal}</p>
-                    <button type="button" onClick={handleCreateQuote} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${quoteGenerated ? "bg-emerald-100 text-emerald-800 cursor-default" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-                      <Banknote size={14} /> Generate Quote
-                    </button>
+                    {quoteGenerated ? (
+                      <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-800">
+                        <CheckCircle size={14} /> Quote Generated
+                      </div>
+                    ) : (
+                      <button type="button" onClick={handleCreateQuote} disabled={quoteServices.length === 0 || quoteSubmitting || !serviceCart?.cartId || !resolvedProjectUserId} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition bg-blue-600 text-white hover:bg-blue-700 ${quoteServices.length === 0 || quoteSubmitting || !serviceCart?.cartId || !resolvedProjectUserId ? "cursor-not-allowed opacity-60" : ""}`}>
+                        <Banknote size={14} /> {quoteSubmitting ? "Saving Quote..." : "Generate Quote"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2576,9 +2915,25 @@ export default function UserDetailsPage() {
             )}
 
             {activeSection === "communication" && (
-              <div className="rounded-xl border bg-slate-50 p-6 text-center">
-                <p className="text-sm font-semibold text-slate-900">Chat moved to dedicated workspace pages.</p>
-                <Link href={`/projects/${id}/workspace/customer-chat`} className="inline-flex mt-3 text-sm text-blue-600 hover:text-blue-700 font-semibold">Open Customer Chat</Link>
+              <div className="space-y-4">
+                <div className="rounded-xl border bg-slate-50 p-6">
+                  <p className="text-sm font-semibold text-slate-900">Project Communication Channels</p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Each project has its own dedicated chat history for Agent X with the customer and Agent Y.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Link href={`/projects/${id}/workspace/customer-chat`} className="rounded-xl border bg-white p-5 transition hover:border-blue-200 hover:shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900">Customer Chat</p>
+                    <p className="mt-2 text-sm text-slate-500">Direct Agent X to customer conversation for this specific project.</p>
+                    <span className="mt-4 inline-flex text-sm font-semibold text-blue-600">Open Customer Chat</span>
+                  </Link>
+                  <Link href={`/projects/${id}/workspace/agent-y-chat`} className="rounded-xl border bg-white p-5 transition hover:border-blue-200 hover:shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900">Agent Y Chat</p>
+                    <p className="mt-2 text-sm text-slate-500">Private coordination channel between Agent X and Agent Y for this project.</p>
+                    <span className="mt-4 inline-flex text-sm font-semibold text-blue-600">Open Agent Y Chat</span>
+                  </Link>
+                </div>
               </div>
             )}
 

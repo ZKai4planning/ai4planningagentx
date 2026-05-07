@@ -10,6 +10,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  MessageSquare,
+  Bot,
 } from "lucide-react"
 import { cn } from "@/app/lib/utils"
 import { useAuthStore } from "@/lib/zustand"
@@ -50,6 +52,8 @@ export default function Sidebar({
   const userId = useAuthStore((state) => state.userId)
 
   const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const workspaceProjectMatch = pathname.match(/^\/projects\/([^/]+)\/workspace(?:\/.*)?$/)
+  const workspaceProjectId = workspaceProjectMatch?.[1] ?? null
 
   /* ================= PROFILE STATUS ================= */
 
@@ -138,6 +142,36 @@ export default function Sidebar({
           <FolderKanban size={18} />
           {!collapsed && "Projects"}
         </Link>
+
+        {workspaceProjectId && (
+          <>
+            <Link
+              href={`/projects/${workspaceProjectId}/workspace/customer-chat`}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm hover:bg-slate-100",
+                pathname.includes("/workspace/customer-chat")
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-600"
+              )}
+            >
+              <MessageSquare size={18} />
+              {!collapsed && "Customer Chat"}
+            </Link>
+
+            <Link
+              href={`/projects/${workspaceProjectId}/workspace/agent-y-chat`}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm hover:bg-slate-100",
+                pathname.includes("/workspace/agent-y-chat")
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-600"
+              )}
+            >
+              <Bot size={18} />
+              {!collapsed && "Agent Y Chat"}
+            </Link>
+          </>
+        )}
 
         <Link
           href="/login"
