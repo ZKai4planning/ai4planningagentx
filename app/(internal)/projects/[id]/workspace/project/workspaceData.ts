@@ -19,6 +19,7 @@ export type WorkspaceStageId =
   | "pending-documents-triggers"
   | "payments-generate-quote"
   | "final-review-check"
+  | "council-fee"
   | "council-submission"
   | "Briefcase-x"
 
@@ -122,6 +123,19 @@ export const defaultWorkspaceRoadmap: WorkspaceRoadmapResponse = {
       desc: "Run the final review before council submission.",
       opensSection: "project",
       queryStep: "final-review",
+      action: {
+        type: "activate-stage",
+        label: "Open Council Fee",
+        targetStageId: "council-fee",
+        targetSection: "payments",
+      },
+    },
+    {
+      id: "council-fee",
+      label: "Payments",
+      desc: "Review payment details before final submission.",
+      opensSection: "payments",
+      queryStep: "council-fee",
       action: {
         type: "activate-stage",
         label: "Open Council Submission",

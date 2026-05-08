@@ -702,7 +702,15 @@ export default function UserDetailsPage() {
   const [addServiceError, setAddServiceError] = useState<string | null>(null)
   const [quoteSubmitting, setQuoteSubmitting] = useState(false)
   const [quoteSubmitError, setQuoteSubmitError] = useState<string | null>(null)
-  const [councilOfficerReportReceived, setCouncilOfficerReportReceived] = useState<"yes" | "no" | null>(null)
+  const [councilFeeRows, setCouncilFeeRows] = useState([
+    { id: "fee-1", label: "", amount: "" },
+  ])
+
+const [councilOfficerReportReceived, setCouncilOfficerReportReceived] = useState<"yes" | "no" | null>(null)
+const [councilFeeSubmitting, setCouncilFeeSubmitting] = useState(false)
+const [councilFeeSubmitError, setCouncilFeeSubmitError] = useState<string | null>(null)
+const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
+
   const [eligibilityLoading, setEligibilityLoading] = useState(true)
   const [pendingDocRequest, setPendingDocRequest] = useState(false)
   const [journeyFieldActions, setJourneyFieldActions] = useState<Record<string, string>>({})
@@ -1597,7 +1605,56 @@ export default function UserDetailsPage() {
 
     void submitQuote()
   };
+const handleGenerateCouncilQuotation = () => {
+  if (!projectId || !resolvedProjectUserId) return
 
+  const validRows = councilFeeRows.filter(
+    (row) =>
+      row.label.trim() !== "" &&
+      row.amount.trim() !== "" &&
+      Number.isFinite(Number(row.amount)) &&
+      Number(row.amount) > 0
+  )
+
+  if (validRows.length === 0) return
+
+  const submitQuotation = async () => {
+    setCouncilFeeSubmitting(true)
+    setCouncilFeeSubmitError(null)
+
+    try {
+      const payload = {
+        userId: resolvedProjectUserId,
+        projectId,
+        services: validRows.map((row) => ({
+          serviceName: row.label.trim(),
+          payment: Number(row.amount),
+        })),
+      }
+
+      await axiosInstance.post(
+        `/service-cart/${encodeURIComponent(projectId)}/quotation`,
+        payload,
+        {
+          params: {
+            userId: resolvedProjectUserId,
+          },
+        }
+      )
+
+      setCouncilFeeSubmitted(true)
+      await loadGeneratedQuotations()
+      setNotes((prev) => ["Council fee quotation generated successfully", ...prev])
+    } catch (error) {
+      setCouncilFeeSubmitError("Unable to generate the council fee quotation right now.")
+      console.error("Failed to generate council fee quotation", error)
+    } finally {
+      setCouncilFeeSubmitting(false)
+    }
+  }
+
+  void submitQuotation()
+}
   const handleViewQuote = (quote: GeneratedQuote) => { setViewingQuote(quote); };
   const handleSendToCustomer = (quoteId: string) => {
     setQuoteHistory((prev) => prev.map(q => q.id === quoteId ? {...q, status: "Sent"} : q));
@@ -1614,7 +1671,6 @@ export default function UserDetailsPage() {
   ]
   
   const paymentRoadmapItems = [`Service name: ${subscriptionPayment.serviceName}`, `Customer name: ${subscriptionPayment.customerName}`, `Subscription: ${subscriptionPayment.subscription}`, `Payment date: ${subscriptionPayment.paymentDate}`, `Payment ID: ${subscriptionPayment.paymentId}`, `Amount: ${subscriptionPayment.amount}`]
-  
   const gasSafetyDoc = findChecklistDocumentByKeywords(documentState.checklist, ["gas safety", "cp12"])
   const eicrDoc = findChecklistDocumentByKeywords(documentState.checklist, ["electrical report", "eicr"])
   const epcDoc = findChecklistDocumentByKeywords(documentState.checklist, ["energy performance", "epc"])
@@ -1862,6 +1918,7 @@ export default function UserDetailsPage() {
     : stage.id === "eligibility-check" && eligibilityData ? { ...stage, calloutLabel: eligibilityData.completionStatus.isCompleted ? "Agent Z Response to you" : undefined, details: pendingEligibilitySteps, detailsLabel: "Pending eligibility sections", desc: eligibilityData.completionStatus.isCompleted ? "Newham HMO licensing review ready for verification." : `Eligibility form is ${eligibilityData.completionStatus.percentage}% complete.`, calloutTypewriterText: eligibilityData.completionStatus.isCompleted ? eligibilityReviewBrief : undefined, calloutStyle: eligibilityData.completionStatus.isCompleted ? "eligibility" : undefined, hideNextLabel: eligibilityData.completionStatus.isCompleted }
     : stage.id === "payments-generate-quote" ? { ...stage, desc: "Review the subscription payment details for this project." }
     : stage.id === "final-review-check" ? { ...stage, desc: "Review the checklist, uploaded documents, and eligibility answers before submission." }
+    : stage.id === "council-fee" ? { ...stage, desc: "Review payment details before moving to final submission." }
     : stage.id === "council-submission" ? { ...stage, detailGroups: [] }
     : stage
   )
@@ -2981,13 +3038,216 @@ export default function UserDetailsPage() {
               </div>
             )}
 
-            {activeSection === "payments" && (
-              <div className="rounded-xl border bg-slate-50 p-6 text-center">
-                <p className="text-sm font-semibold text-slate-900">Payment details moved to dedicated workspace page.</p>
-                <Link href={`/projects/${id}/workspace/payments`} className="inline-flex mt-3 text-sm text-blue-600 hover:text-blue-700 font-semibold">Open Payment Details</Link>
-              </div>
-            )}
+       {activeSection === "payments" && (
+  <div className="space-y-6">
+    <div className="rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="flex items-center gap-2 mb-6">
+        <Banknote size={18} className="text-blue-600" />
+        <h2 className="text-lg font-bold text-slate-900">Payments</h2>
+      </div>
+    </div>
 
+    <div className="rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Council Fee Rows</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Add amount details and payment amounts, then generate the quotation.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            setCouncilFeeRows((prev) => [
+              ...prev,
+              { id: `fee-${Date.now()}`, label: "", amount: "" },
+            ])
+          }
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-lg font-semibold text-white hover:bg-blue-700"
+        >
+          +
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {councilFeeRows.map((row) => (
+          <div key={row.id} className="grid gap-4 rounded-xl border bg-slate-50 p-4 md:grid-cols-[1.6fr_0.8fr_auto]">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Amount Details</label>
+              <input
+                value={row.label}
+                onChange={(e) =>
+                  setCouncilFeeRows((prev) =>
+                    prev.map((item) =>
+                      item.id === row.id ? { ...item, label: e.target.value } : item
+                    )
+                  )
+                }
+                placeholder="e.g. Counseling Payment"
+                disabled={councilFeeSubmitted}
+                className="w-full rounded-xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Amount</label>
+              <input
+                type="number"
+                value={row.amount}
+                onChange={(e) =>
+                  setCouncilFeeRows((prev) =>
+                    prev.map((item) =>
+                      item.id === row.id ? { ...item, amount: e.target.value } : item
+                    )
+                  )
+                }
+                placeholder="e.g. 2500"
+                disabled={councilFeeSubmitted}
+                className="w-full rounded-xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div className="flex items-end">
+              {councilFeeRows.length > 1 && !councilFeeSubmitted ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCouncilFeeRows((prev) =>
+                      prev.filter((item) => item.id !== row.id)
+                    )
+                  }
+                  className="p-3 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                >
+                  <Trash2 size={16} />
+                </button>
+              ) : (
+                <div className="p-3 w-[46px]" />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Validation summary */}
+      {councilFeeRows.some((row) => row.label.trim() !== "" || row.amount.trim() !== "") &&
+        !councilFeeRows.some((row) => row.label.trim() !== "" && row.amount.trim() !== "" && Number(row.amount) > 0) && (
+          <p className="mt-3 text-xs text-amber-600 font-medium">
+            Please fill in both Amount Details and a valid Amount for at least one row.
+          </p>
+        )}
+
+      {/* Error message */}
+      {councilFeeSubmitError && (
+        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {councilFeeSubmitError}
+        </div>
+      )}
+
+      {/* Services summary before submission */}
+      {councilFeeRows.filter(
+        (row) =>
+          row.label.trim() !== "" &&
+          row.amount.trim() !== "" &&
+          Number.isFinite(Number(row.amount)) &&
+          Number(row.amount) > 0
+      ).length > 0 && (
+        <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+            Quotation Summary
+          </p>
+          <div className="space-y-2">
+            {councilFeeRows
+              .filter(
+                (row) =>
+                  row.label.trim() !== "" &&
+                  row.amount.trim() !== "" &&
+                  Number.isFinite(Number(row.amount)) &&
+                  Number(row.amount) > 0
+              )
+              .map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between rounded-lg bg-white border px-3 py-2"
+                >
+                  <span className="text-sm font-medium text-slate-700">{row.label}</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {Number(row.amount)} GBP
+                  </span>
+                </div>
+              ))}
+            <div className="flex items-center justify-between border-t border-blue-200 pt-2 mt-2">
+              <span className="text-sm font-bold text-slate-800">Total</span>
+              <span className="text-sm font-bold text-blue-700">
+                {councilFeeRows
+                  .filter(
+                    (row) =>
+                      row.label.trim() !== "" &&
+                      row.amount.trim() !== "" &&
+                      Number.isFinite(Number(row.amount)) &&
+                      Number(row.amount) > 0
+                  )
+                  .reduce((sum, row) => sum + Number(row.amount), 0)}{" "}
+                GBP
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generate Quotation button */}
+      <div className="mt-6 border-t pt-4 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Council Fee Quotation</p>
+          <p className="text-xs text-slate-500">
+            {councilFeeSubmitted
+              ? "Quotation has been generated successfully."
+              : "Generate a quotation for the council fee payment rows above."}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {councilFeeSubmitted ? (
+            <div className="inline-flex items-center gap-2 rounded-xl bg-emerald-100 px-5 py-2.5 text-sm font-semibold text-emerald-800">
+              <CheckCircle size={16} />
+              Quotation Generated
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleGenerateCouncilQuotation}
+              disabled={
+                councilFeeSubmitting ||
+                !projectId ||
+                !resolvedProjectUserId ||
+                !councilFeeRows.some(
+                  (row) =>
+                    row.label.trim() !== "" &&
+                    row.amount.trim() !== "" &&
+                    Number.isFinite(Number(row.amount)) &&
+                    Number(row.amount) > 0
+                )
+              }
+              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
+                councilFeeSubmitting ||
+                !projectId ||
+                !resolvedProjectUserId ||
+                !councilFeeRows.some(
+                  (row) =>
+                    row.label.trim() !== "" &&
+                    row.amount.trim() !== "" &&
+                    Number.isFinite(Number(row.amount)) &&
+                    Number(row.amount) > 0
+                )
+                  ? "cursor-not-allowed bg-blue-300 text-white/80"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              <Banknote size={14} />
+              {councilFeeSubmitting ? "Generating Quotation..." : "Generate Quotation"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
             {activeSection === "notes" && (
               <div>
                 <div className="flex items-center gap-2 mb-5"><StickyNote size={18} className="text-blue-600" /><h2 className="text-lg font-bold text-slate-900">Internal Notes</h2></div>
