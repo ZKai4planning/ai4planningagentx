@@ -714,6 +714,7 @@ export default function UserDetailsPage() {
   
   // Quote State
   const [quoteGenerated, setQuoteGenerated] = useState(false)
+  const [quotedCartIds, setQuotedCartIds] = useState<string[]>([])
   const [quoteHistory, setQuoteHistory] = useState<GeneratedQuote[]>([]);
   const [viewingQuote, setViewingQuote] = useState<GeneratedQuote | null>(null);
   const [viewingDocument, setViewingDocument] = useState<BriefcaseDocumentItem | null>(null)
@@ -821,8 +822,11 @@ export default function UserDetailsPage() {
       )
 
       const quotationItems = getGeneratedQuotationItems(response.data.data)
+      const nextQuotedCartIds = quotationItems
+        .map((quotation) => (typeof quotation.cartId === "string" ? quotation.cartId : null))
+        .filter((cartId): cartId is string => Boolean(cartId))
       const currentCartHasGeneratedQuote = serviceCart?.cartId
-        ? quotationItems.some((quotation) => quotation.cartId === serviceCart.cartId)
+        ? nextQuotedCartIds.includes(serviceCart.cartId)
         : false
 
       const generatedQuotes = quotationItems
@@ -834,6 +838,7 @@ export default function UserDetailsPage() {
         )
         .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
 
+      setQuotedCartIds(nextQuotedCartIds)
       setQuoteHistory(generatedQuotes)
       setQuoteGenerated(currentCartHasGeneratedQuote)
 
@@ -844,6 +849,7 @@ export default function UserDetailsPage() {
       }
     } catch (error) {
       console.error("Failed to load generated quotations", error)
+      setQuotedCartIds([])
       setQuoteHistory([])
       setQuoteGenerated(false)
     }
@@ -1439,7 +1445,10 @@ export default function UserDetailsPage() {
       setAddServiceError(null)
 
       try {
-        const payload: AddServiceCartPayload = {
+        const shouldCreateNewCart =
+          !serviceCart?.cartId || quotedCartIds.includes(serviceCart.cartId)
+
+        const createCartPayload: AddServiceCartPayload = {
           projectId,
           userId: resolvedProjectUserId,
           services: [
@@ -1450,12 +1459,33 @@ export default function UserDetailsPage() {
           ],
         }
 
-        const createCartResponse = await axiosInstance.post<ServiceCartResponse>(
-          `/service-cart`,
-          payload
-        )
+        let nextCart: ServiceCartData | null = null
 
-        let nextCart = createCartResponse.data.data ?? null
+        if (shouldCreateNewCart) {
+          const createCartResponse = await axiosInstance.post<ServiceCartResponse>(
+            `/service-cart`,
+            createCartPayload
+          )
+
+          nextCart = createCartResponse.data.data ?? null
+        } else {
+          const updateCartPayload = {
+            userId: resolvedProjectUserId,
+            services: [
+              {
+                serviceName,
+                payment,
+              },
+            ],
+          }
+
+          const updateCartResponse = await axiosInstance.put<ServiceCartResponse>(
+            `/service-cart/cart/${encodeURIComponent(serviceCart.cartId)}`,
+            updateCartPayload
+          )
+
+          nextCart = updateCartResponse.data.data ?? null
+        }
 
         if (!nextCart?.cartId) {
           const response = await axiosInstance.get<ServiceCartResponse>(
@@ -1474,6 +1504,9 @@ export default function UserDetailsPage() {
         setServiceCart(nextCart)
         setQuoteGenerated(false)
         setQuoteSubmitError(null)
+        setQuotedCartIds((current) =>
+          nextCart?.cartId ? current.filter((cartId) => cartId !== nextCart.cartId) : current
+        )
         setQuoteServices(mapServiceCartToQuoteServices(nextCart))
         setNewServiceName("")
         setNewServiceAmount("")
