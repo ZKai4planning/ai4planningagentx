@@ -638,6 +638,14 @@ function mapServiceCartToQuoteServices(cart: ServiceCartData | null): QuoteServi
   }))
 }
 
+function parsePaymentAmount(amount: string | number | null | undefined): number {
+  if (!amount) return 0;
+
+  if (typeof amount === "number") return amount;
+
+  return Number(String(amount).replace(/[^0-9.-]+/g, "")) || 0;
+}
+
 function mapQuoteServicesToCartPayloadServices(services: QuoteService[]) {
   return services.map((service) => ({
     serviceName: service.title.trim() || "Unnamed service",
