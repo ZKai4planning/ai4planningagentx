@@ -428,6 +428,36 @@ function getScheduleTimestamp(dateTimeValue?: string, dateValue?: string, timeVa
   return null
 }
 
+function formatCurrencyGBP(value: number) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+function getProjectPaymentStatus(source: unknown): "paid" | "pending" {
+  const candidatePaths = [
+    ["paymentStatus"],
+    ["payment", "status"],
+    ["subscription", "paymentStatus"],
+    ["user", "paymentStatus"],
+    ["customer", "paymentStatus"],
+    ["project", "paymentStatus"],
+  ] as const
+
+  for (const path of candidatePaths) {
+    const value = getNestedValue(source, path)
+    if (typeof value !== "string") continue
+
+    const normalized = value.trim().toLowerCase()
+    if (["paid", "completed", "success"].includes(normalized)) return "paid"
+    if (["pending", "unpaid", "requested", "due"].includes(normalized)) return "pending"
+  }
+
+  return "pending"
+}
+
 function formatEligibilityStatus(status?: string | null) {
   if (!status) return "Eligibility"
   return status.split("_").filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
@@ -605,6 +635,13 @@ function mapServiceCartToQuoteServices(cart: ServiceCartData | null): QuoteServi
     amount: formatPaymentAmount(service.payment),
     about: "Service loaded from the payment-stage cart.",
     status: (service.payment ?? 0) > 0 ? "Ready" : "Pending payment",
+  }))
+}
+
+function mapQuoteServicesToCartPayloadServices(services: QuoteService[]) {
+  return services.map((service) => ({
+    serviceName: service.title.trim() || "Unnamed service",
+    payment: parsePaymentAmount(service.amount),
   }))
 }
 
@@ -1325,6 +1362,43 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
   const surveyFullLocationDisplay = surveyApplicationLocationDisplay !== "-"
     ? surveyApplicationLocationDisplay
     : formatFullLocation(surveyLocationDisplay, applicationPostcodeValue ?? postcode)
+  const councilSubmissionFeeStatus = getProjectPaymentStatus(applicationProject)
+  const councilSubmissionFeeStatusLabel = councilSubmissionFeeStatus === "paid" ? "Paid" : "Due Pending"
+  const councilSubmissionFeeStatusClasses = councilSubmissionFeeStatus === "paid"
+    ? "bg-emerald-100 text-emerald-700"
+    : "bg-amber-100 text-amber-700"
+  const councilSubmissionFeeItems = [
+    {
+      category: "Mandatory HMO Licence",
+      fee: `${formatCurrencyGBP(1400)} per property`,
+      notes: "Applies to HMOs with 5+ occupants from 2+ households. Borough-wide coverage, no exemptions.",
+      isTotal: false,
+    },
+    {
+      category: "Planning Permission (Change of Use)",
+      fee: formatCurrencyGBP(258),
+      notes: "Standard national fee for change of use (C3 to C4 or Sui Generis). Required if converting to HMO.",
+      isTotal: false,
+    },
+    // {
+    //   category: "Additional HMO Licence (more than 5 occupants)",
+    //   fee: formatCurrencyGBP(1250),
+    //   notes: "Only relevant if applying under additional scheme, not mandatory.",
+    //   isTotal: false,
+    // },
+    // {
+    //   category: "Selective Licence (all rentals)",
+    //   fee: formatCurrencyGBP(750),
+    //   notes: "Applies to all rented properties in Newham, separate from HMO licence.",
+    //   isTotal: false,
+    // },
+    {
+      category: "Total (Mandatory HMO + Planning)",
+      fee: `Approx. ${formatCurrencyGBP(1658)}`,
+      notes: "Core submission cost for a 5+ person HMO with planning change of use.",
+      isTotal: true,
+    },
+  ]
 
   const triggerRoadmapItems = [
     {
@@ -2661,6 +2735,63 @@ const handleGenerateCouncilQuotation = () => {
                          <div className="space-y-2">{submissionPropertyRows.map((row) => (<InfoPair key={row.label} label={row.label} value={row.value} />))}</div>
                       </OverviewCard>
                     </div>
+
+                    <OverviewCard title="Council Submission Fee" icon={<Banknote size={14} className="text-amber-600" />}>
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Fee Breakdown - Newham Council (2026)</p>
+                            <p className="mt-1 text-xs text-slate-500">Approximate council and licensing charges for HMO-related submission work.</p>
+                          </div>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${councilSubmissionFeeStatusClasses}`}>
+                            {councilSubmissionFeeStatusLabel}
+                          </span>
+                        </div>
+
+                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-200">
+                              <thead className="bg-slate-50">
+                                <tr>
+                                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Category</th>
+                                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fee (Approx.)</th>
+                                  {/* <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notes</th> */}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {councilSubmissionFeeItems.map((item) => (
+                                  <tr key={item.category} className={item.isTotal ? "bg-amber-50/60" : "bg-white"}>
+                                    <td className={`px-4 py-3 text-sm ${item.isTotal ? "font-bold text-slate-900" : "font-semibold text-slate-800"}`}>
+                                      {item.category}
+                                    </td>
+                                    <td className={`px-4 py-3 text-sm whitespace-nowrap ${item.isTotal ? "font-bold text-slate-900" : "font-semibold text-slate-800"}`}>
+                                      {item.fee}
+                                    </td>
+                                    {/* <td className="px-4 py-3 text-xs leading-relaxed text-slate-500">
+                                      {item.notes}
+                                    </td> */}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div className={`rounded-xl border px-4 py-3 ${councilSubmissionFeeStatus === "paid" ? "border-emerald-200 bg-emerald-50/80" : "border-amber-200 bg-amber-50/80"}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">Council submission total</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {councilSubmissionFeeStatus === "paid"
+                                  ? "The core council submission fee has been recorded as paid."
+                                  : "The core council submission fee is still due and pending payment."}
+                              </p>
+                            </div>
+                            <p className="text-lg font-bold text-slate-900">Approx. {formatCurrencyGBP(1658)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </OverviewCard>
 
                     <OverviewCard title="Council Ready Submission Pack" icon={<FileText size={14} className="text-blue-600" />}>
                       <div className="space-y-3">
