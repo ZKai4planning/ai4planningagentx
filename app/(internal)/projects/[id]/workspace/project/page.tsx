@@ -1394,7 +1394,7 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
     // },
     {
       category: "Total (Mandatory HMO + Planning)",
-      fee: `Approx. ${formatCurrencyGBP(1658)}`,
+      fee: `${formatCurrencyGBP(1658)}`,
       notes: "Core submission cost for a 5+ person HMO with planning change of use.",
       isTotal: true,
     },
@@ -2754,7 +2754,7 @@ const handleGenerateCouncilQuotation = () => {
                               <thead className="bg-slate-50">
                                 <tr>
                                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Category</th>
-                                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fee (Approx.)</th>
+                                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fee</th>
                                   {/* <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notes</th> */}
                                 </tr>
                               </thead>
@@ -2787,7 +2787,7 @@ const handleGenerateCouncilQuotation = () => {
                                   : "The core council submission fee is still due and pending payment."}
                               </p>
                             </div>
-                            <p className="text-lg font-bold text-slate-900">Approx. {formatCurrencyGBP(1658)}</p>
+                            <p className="text-lg font-bold text-slate-900">Grand Total: {formatCurrencyGBP(1658)}</p>
                           </div>
                         </div>
                       </div>
