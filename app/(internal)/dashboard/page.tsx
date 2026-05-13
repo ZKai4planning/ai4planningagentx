@@ -90,9 +90,11 @@ type ProjectRow = {
   status: string
   createdOn: string
   updatedOn: string
+  createdAtRaw: string
   subscriptionDetails: string
   paymentStatus: "paid" | "pending"
   updatedAtRaw: string
+  isNew: boolean
   consultationBooked: boolean
   consultationDate: string
   consultationTime: string
@@ -323,9 +325,11 @@ function mapProjectToRow(project: ApiProject): ProjectRow {
     status: project.projectStatus || "unknown",
     createdOn: formatDate(project.createdAt),
     updatedOn: formatDate(project.updatedAt),
+    createdAtRaw: project.createdAt,
     subscriptionDetails: getSubscriptionDetails(project),
     paymentStatus: getPaymentStatus(project),
     updatedAtRaw: project.updatedAt,
+    isNew: isProjectNew(project.createdAt),
     consultationBooked,
     consultationDate:
       consultationTimestamp !== null
@@ -401,6 +405,10 @@ function getDaysAgo(value: string) {
   }
 
   return Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24))
+}
+
+function isProjectNew(value: string) {
+  return getDaysAgo(value) <= 7
 }
 
 function formatScheduleDate(value: string) {
@@ -539,9 +547,11 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       status: "in_progress",
       createdOn: "-",
       updatedOn: "-",
+      createdAtRaw: new Date().toISOString(),
       subscriptionDetails: "Gold",
       paymentStatus: "paid",
       updatedAtRaw: new Date().toISOString(),
+      isNew: true,
       consultationBooked: true,
       consultationDate: "-",
       consultationTime: "-",
@@ -564,9 +574,11 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       status: "active",
       createdOn: "-",
       updatedOn: "-",
+      createdAtRaw: new Date().toISOString(),
       subscriptionDetails: "Silver",
       paymentStatus: "paid",
       updatedAtRaw: new Date().toISOString(),
+      isNew: true,
       consultationBooked: true,
       consultationDate: "-",
       consultationTime: "-",
@@ -589,9 +601,11 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       status: "in_progress",
       createdOn: "-",
       updatedOn: "-",
+      createdAtRaw: new Date().toISOString(),
       subscriptionDetails: "Bronze",
       paymentStatus: "pending",
       updatedAtRaw: new Date().toISOString(),
+      isNew: true,
       consultationBooked: true,
       consultationDate: "-",
       consultationTime: "-",
@@ -614,9 +628,11 @@ function buildMockConsultationRows(projects: ProjectRow[]) {
       status: "active",
       createdOn: "-",
       updatedOn: "-",
+      createdAtRaw: new Date().toISOString(),
       subscriptionDetails: "Gold",
       paymentStatus: "paid",
       updatedAtRaw: new Date().toISOString(),
+      isNew: true,
       consultationBooked: true,
       consultationDate: "-",
       consultationTime: "-",
@@ -656,6 +672,14 @@ function StatusBadge({ status }: { status: string | undefined }) {
   return (
     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(status)}`}>
       {formatStatusLabel(status)}
+    </span>
+  )
+}
+
+function NewProjectBadge() {
+  return (
+    <span className="inline-flex animate-pulse rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white shadow-sm">
+      New
     </span>
   )
 }
@@ -818,7 +842,12 @@ export default function DashboardPage() {
         label: "Project ID",
         sortable: true,
         width: "160px",
-        render: (value) => <span className="font-semibold text-slate-900">{value}</span>,
+        render: (value, row) => (
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-900">{value}</span>
+            {row.isNew ? <NewProjectBadge /> : null}
+          </div>
+        ),
       },
       {
         key: "customer",
@@ -944,7 +973,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl">
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Welcome Agent X
+                  Welcome Agent 
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
                   This dashboard now pulls the same project data as the projects page, so your overview and table stay aligned.
@@ -1050,7 +1079,10 @@ export default function DashboardPage() {
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Project
                           </p>
-                          <p className="mt-1 text-sm font-medium text-slate-900">{project.projectId}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-slate-900">{project.projectId}</p>
+                            {project.isNew ? <NewProjectBadge /> : null}
+                          </div>
                           <p className="mt-1 text-xs text-slate-500">{project.councilName}</p>
                         </div>
                         <div className="rounded-xl bg-white px-3 py-2.5">
@@ -1123,7 +1155,10 @@ export default function DashboardPage() {
                       className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
                     >
                       <div>
-                        <p className="font-medium text-slate-900">{project.projectId}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-slate-900">{project.projectId}</p>
+                          {project.isNew ? <NewProjectBadge /> : null}
+                        </div>
                         <p className="text-sm text-slate-500">{project.customer}</p>
                       </div>
                       <div className="text-right">
@@ -1178,7 +1213,10 @@ export default function DashboardPage() {
                   <article key={project.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-bold text-slate-900">{project.projectId}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-bold text-slate-900">{project.projectId}</p>
+                          {project.isNew ? <NewProjectBadge /> : null}
+                        </div>
                         <p className="mt-1 text-sm text-slate-700">{project.customer}</p>
                       </div>
                       <StatusBadge status={project.status} />
