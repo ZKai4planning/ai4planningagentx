@@ -465,7 +465,7 @@ export default function ProjectsPage() {
   const subtitle = error ?? "Projects fetched from /projects/all"
 
   return (
-    <div className="mx-auto flex max-w-8xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10">
+    <div className="mx-auto flex max-w-8xl flex-col gap-6 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-10">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Projects</h1>
@@ -544,11 +544,11 @@ export default function ProjectsPage() {
               </div>
             ) : (
               projects.map((project) => (
-                <article key={project.id} className="rounded-xl border bg-slate-50 p-4">
+                <article key={project.id} className="min-w-0 rounded-xl border bg-slate-50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-bold text-slate-900">{project.projectId}</p>
-                      <p className="mt-1 text-sm text-slate-700">{project.customer}</p>
+                      <p className="mt-1 break-words text-sm text-slate-700">{project.customer}</p>
                     </div>
                     <StatusBadge status={project.status} />
                   </div>
@@ -723,9 +723,9 @@ function InfoField({
   helperTone?: "paid" | "pending"
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1 text-sm text-slate-800">{value}</p>
+      <p className="mt-1 break-words text-sm text-slate-800">{value}</p>
       {helperText ? (
         <p
           className={`mt-1 text-xs font-medium ${

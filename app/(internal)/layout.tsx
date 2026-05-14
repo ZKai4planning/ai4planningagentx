@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Suspense, useEffect, useMemo, useState } from "react"
+import { Menu } from "lucide-react"
 import Sidebar from "../../components/sidebar"
 import { CustomerProvider } from "../context/CustomerContext"
 import axiosInstance from "@/lib/axiosinstance"
@@ -13,6 +14,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const userId = useAuthStore((state) => state.userId)
   const name = useAuthStore((state) => state.name)
   const email = useAuthStore((state) => state.email)
@@ -53,14 +55,34 @@ export default function DashboardLayout({
   }, [name, setProfileName, userId])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50">
       <Suspense fallback={null}>
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+        <Sidebar
+          collapsed={collapsed}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
+          onToggle={() => setCollapsed(!collapsed)}
+        />
       </Suspense>
 
-      <div className="flex-1 overflow-y-auto">
-        <header className="sticky top-0 border-b bg-white px-4 sm:px-6 lg:px-10 py-3 h-18">
-          <div className="flex items-end justify-end gap-3">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b bg-white/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-10">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 lg:hidden"
+              aria-label="Open navigation menu"
+            >
+              <Menu size={18} />
+            </button>
+
+            <div className="hidden min-w-0 sm:block">
+              <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
+              <p className="truncate text-xs text-slate-500">{email ?? "Logged in user"}</p>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3">
             {/* <div>
               <p className="text-sm font-semibold text-slate-900">{displayName}</p>
               <p className="text-xs text-slate-500">{email ?? "Logged in user"}</p>
@@ -71,9 +93,12 @@ export default function DashboardLayout({
             >
               Profile
             </Link>
+            </div>
           </div>
         </header>
-        <CustomerProvider>{children}</CustomerProvider>
+        <main className="min-w-0 flex-1 overflow-x-hidden">
+          <CustomerProvider>{children}</CustomerProvider>
+        </main>
       </div>
     </div>
   )

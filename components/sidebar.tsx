@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { usePathname, useSearchParams, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   LayoutDashboard,
@@ -12,28 +12,16 @@ import {
   ChevronRight,
   MessageSquare,
   Bot,
+  X,
 } from "lucide-react"
 import { cn } from "@/app/lib/utils"
 import { useAuthStore } from "@/lib/zustand"
 import axiosInstance from "@/lib/axiosinstance"
 
-/* ================= TYPES ================= */
-
-type MenuChild = {
-  label: string
-  href: string
-}
-
-type MenuItem = {
-  label: string
-  icon: React.ElementType
-  href?: string
-  workspaceSection?: string
-  children?: MenuChild[]
-}
-
 type SidebarProps = {
   collapsed: boolean
+  mobileOpen?: boolean
+  onCloseMobile?: () => void
   onToggle: () => void
 }
 
@@ -41,17 +29,17 @@ type SidebarProps = {
 
 export default function Sidebar({
   collapsed,
+  mobileOpen = false,
+  onCloseMobile,
   onToggle,
 }: SidebarProps) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const router = useRouter()
 
   const name = useAuthStore((state) => state.name)
   const email = useAuthStore((state) => state.email)
   const userId = useAuthStore((state) => state.userId)
 
-  const [openGroup, setOpenGroup] = useState<string | null>(null)
   const workspaceProjectMatch = pathname.match(/^\/projects\/([^/]+)\/workspace(?:\/.*)?$/)
   const workspaceProjectId = workspaceProjectMatch?.[1] ?? null
 
@@ -81,6 +69,10 @@ export default function Sidebar({
     fetchProfileStatus()
   }, [userId])
 
+  useEffect(() => {
+    onCloseMobile?.()
+  }, [pathname, onCloseMobile])
+
   /* ================= NAME ================= */
 
   const displayName =
@@ -90,149 +82,170 @@ export default function Sidebar({
   /* ================= UI ================= */
 
   return (
-    <aside
-      className={cn(
-        "sticky top-0 z-40 flex h-screen flex-col border-r bg-white transition-all duration-300",
-        collapsed ? "w-20" : "w-64"
-      )}
-    >
-      {/* ================= BRAND ================= */}
-      <div className="flex items-center justify-between border-b px-4 py-4">
-        {!collapsed && (
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
-              A
-            </div>
-            <span className="font-semibold text-slate-900">
-              AI4Planning
-            </span>
-          </div>
+    <>
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-slate-950/45 transition-opacity duration-300 lg:hidden",
+          mobileOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         )}
+        onClick={onCloseMobile}
+        aria-hidden="true"
+      />
 
-        <button
-          onClick={onToggle}
-          className="rounded-lg p-2 hover:bg-slate-100"
-        >
-          {collapsed ? <ChevronRight /> : <ChevronLeft />}
-        </button>
-      </div>
-
-      {/* ================= MENU (unchanged) ================= */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
-        >
-          <LayoutDashboard size={18} />
-          {!collapsed && "Dashboard"}
-        </Link>
-
-        <Link
-          href="/users"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
-        >
-          <Users size={18} />
-          {!collapsed && "Users"}
-        </Link>
-
-        <Link
-          href="/projects"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
-        >
-          <FolderKanban size={18} />
-          {!collapsed && "Projects"}
-        </Link>
-
-        {workspaceProjectId && (
-          <>
-            <Link
-              href={`/projects/${workspaceProjectId}/workspace/customer-chat`}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm hover:bg-slate-100",
-                pathname.includes("/workspace/customer-chat")
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-slate-600"
-              )}
-            >
-              <MessageSquare size={18} />
-              {!collapsed && "Customer Chat"}
-            </Link>
-
-            <Link
-              href={`/projects/${workspaceProjectId}/workspace/agent-y-chat`}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm hover:bg-slate-100",
-                pathname.includes("/workspace/agent-y-chat")
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-slate-600"
-              )}
-            >
-              <Bot size={18} />
-              {!collapsed && "Agent Y Chat"}
-            </Link>
-          </>
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(18rem,82vw)] flex-col border-r bg-white shadow-xl transition-transform duration-300 lg:sticky lg:top-0 lg:z-40 lg:h-screen lg:translate-x-0 lg:shadow-none",
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          collapsed ? "lg:w-20" : "lg:w-64"
         )}
-
-        <Link
-          href="/login"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
-        >
-          <LogOut size={18} />
-          {!collapsed && "Logout"}
-        </Link>
-      </nav>
-
-      {/* ================= FOOTER ================= */}
-      {!collapsed && (
-        <div className="border-t px-4 py-4 space-y-3">
-
-          {/* 🔹 PROFILE COMPLETION */}
-          {profileStatus && (
-            <div
-              onClick={() => router.push("/profile")}
-              className="cursor-pointer rounded-lg bg-slate-50 p-3 transition hover:bg-slate-100"
-            >
-              <div className="flex justify-between text-xs text-slate-500 mb-2">
-                <span className="font-medium">Profile Completion</span>
-                <span className="font-semibold text-slate-700">
-                  {profileStatus.completionPercentage}%
-                </span>
+      >
+        {/* ================= BRAND ================= */}
+        <div className="flex items-center justify-between border-b px-4 py-4">
+          {!collapsed && (
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
+                A
               </div>
-
-              <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-600 transition-all duration-500"
-                  style={{
-                    width: `${profileStatus.completionPercentage}%`,
-                  }}
-                />
-              </div>
-
-              <p className="text-[11px] text-slate-400 mt-2">
-                {profileStatus.completedFields} of{" "}
-                {profileStatus.totalFields} fields completed
-              </p>
+              <span className="truncate font-semibold text-slate-900">
+                AI4Planning
+              </span>
             </div>
           )}
 
-          {/* 🔹 WELCOME CARD */}
-          <div className="rounded-xl bg-slate-50 px-4 py-3 flex items-center gap-3">
-            <div className="h-9 w-9 flex items-center justify-center rounded-full bg-blue-600 text-white font-semibold">
-              {displayName?.charAt(0).toUpperCase()}
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="rounded-lg p-2 hover:bg-slate-100 lg:hidden"
+              aria-label="Close navigation menu"
+            >
+              <X size={18} />
+            </button>
 
-            <div>
-              <p className="text-xs text-slate-500">
-                Welcome back,
-              </p>
-              <p className="text-sm font-semibold text-slate-900">
-                {displayName}
-              </p>
+            <button
+              type="button"
+              onClick={onToggle}
+              className="hidden rounded-lg p-2 hover:bg-slate-100 lg:inline-flex"
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? <ChevronRight /> : <ChevronLeft />}
+            </button>
+          </div>
+        </div>
+
+        {/* ================= MENU ================= */}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            <LayoutDashboard size={18} />
+            {!collapsed && "Dashboard"}
+          </Link>
+
+          <Link
+            href="/users"
+            className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            <Users size={18} />
+            {!collapsed && "Users"}
+          </Link>
+
+          <Link
+            href="/projects"
+            className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            <FolderKanban size={18} />
+            {!collapsed && "Projects"}
+          </Link>
+
+          {workspaceProjectId && (
+            <>
+              <Link
+                href={`/projects/${workspaceProjectId}/workspace/customer-chat`}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm hover:bg-slate-100",
+                  pathname.includes("/workspace/customer-chat")
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-600"
+                )}
+              >
+                <MessageSquare size={18} />
+                {!collapsed && "Customer Chat"}
+              </Link>
+
+              <Link
+                href={`/projects/${workspaceProjectId}/workspace/agent-y-chat`}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm hover:bg-slate-100",
+                  pathname.includes("/workspace/agent-y-chat")
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-600"
+                )}
+              >
+                <Bot size={18} />
+                {!collapsed && "Agent Y Chat"}
+              </Link>
+            </>
+          )}
+
+          <Link
+            href="/login"
+            className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            <LogOut size={18} />
+            {!collapsed && "Logout"}
+          </Link>
+        </nav>
+
+        {/* ================= FOOTER ================= */}
+        {!collapsed && (
+          <div className="space-y-3 border-t px-4 py-4">
+            {profileStatus && (
+              <div
+                onClick={() => router.push("/profile")}
+                className="cursor-pointer rounded-lg bg-slate-50 p-3 transition hover:bg-slate-100"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                  <span className="min-w-0 truncate font-medium">Profile Completion</span>
+                  <span className="shrink-0 font-semibold text-slate-700">
+                    {profileStatus.completionPercentage}%
+                  </span>
+                </div>
+
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full bg-blue-600 transition-all duration-500"
+                    style={{
+                      width: `${profileStatus.completionPercentage}%`,
+                    }}
+                  />
+                </div>
+
+                <p className="mt-2 text-[11px] leading-4 text-slate-400">
+                  {profileStatus.completedFields} of{" "}
+                  {profileStatus.totalFields} fields completed
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-semibold">
+                {displayName?.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500">
+                  Welcome back,
+                </p>
+                <p className="truncate text-sm font-semibold text-slate-900">
+                  {displayName}
+                </p>
+              </div>
             </div>
           </div>
-
-        </div>
-      )}
-    </aside>
+        )}
+      </aside>
+    </>
   )
 }

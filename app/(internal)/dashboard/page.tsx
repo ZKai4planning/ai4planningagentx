@@ -926,35 +926,35 @@ export default function DashboardPage() {
       label: "Active Projects",
       value: dashboardStats.active,
       helper: "Statuses marked active, in progress, or eligibility in progress",
-      color: "var(--color-chart-1)",
+      color: "oklch(0.646 0.222 41.116)",
     },
     {
       icon: <FolderKanban size={18} />,
       label: "Pending Documentation",
       value: dashboardStats.pendingDocumentation,
       helper: "Projects still in eligibility, checklist, or document review stages",
-      color: "var(--color-chart-2)",
+      color: "oklch(0.6 0.118 184.704)",
     },
     {
       icon: <AlertTriangle size={18} />,
       label: "High Risk Cases",
       value: dashboardStats.attention,
       helper: "Cancelled, unknown, or missing Agent X or Agent Y assignment",
-      color: "var(--color-chart-3)",
+      color: "oklch(0.398 0.07 227.392)",
     },
     {
       icon: <CheckCircle2 size={18} />,
       label: "Pending Council Submissions",
       value: dashboardStats.pendingCouncilSubmissions,
       helper: "Projects currently sitting in the council submission stage",
-      color: "var(--color-chart-4)",
+      color: "oklch(0.828 0.189 84.429)",
     },
     {
       icon: <CheckCircle2 size={18} />,
       label: "Successful Completions",
       value: dashboardStats.completed,
       helper: "Projects with a completed status on this page",
-      color: "var(--color-chart-5)",
+      color: "oklch(0.769 0.188 70.08)",
     },
     {
       icon: <MessageSquare size={18} />,
@@ -966,21 +966,21 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-10">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 px-4 py-5 sm:px-6 sm:py-6 lg:px-10">
       <div className="mx-auto flex max-w-8xl flex-col gap-6">
-        <section className="grid gap-4 xl:grid-cols-[1.15fr_1.25fr]">
+        <section className="grid gap-4 2xl:grid-cols-[1.15fr_1.25fr]">
           <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-5 text-white shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl">
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Welcome Agent 
+                  Welcome {displayName}
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
                   This dashboard now pulls the same project data as the projects page, so your overview and table stay aligned.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur">
+              <div className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur sm:w-auto">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Projects</p>
                 <p className="mt-1 font-medium">{pagination.totalItems} total projects</p>
                 <p className="text-slate-400">
@@ -989,7 +989,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
               {heroMetrics.map((metric) => (
                 <HeroMetric
                   key={metric.label}
@@ -1002,9 +1002,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
+          <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">KPI Mix</p>
                 <h2 className="mt-2 text-xl font-semibold text-slate-900">Metric distribution</h2>
                 <p className="mt-2 text-sm text-slate-500">Visual breakdown of the same KPI totals shown in the hero cards. A project can contribute to more than one KPI.</p>
@@ -1024,8 +1024,8 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
-          <div className="rounded-3xl border bg-white p-6 shadow-sm">
+        <section className="grid gap-6 2xl:grid-cols-[1.3fr_1fr]">
+          <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Client Consultantation Schedule</h2>
@@ -1048,14 +1048,14 @@ export default function DashboardPage() {
                   const consultantName = project.consultant === "-" ? "Our planning team" : project.consultant
 
                   return (
-                    <article key={project.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-start justify-between gap-3">
+                    <article key={project.id} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <h3 className="truncate text-base font-semibold text-slate-900">{project.customer}</h3>
-                          <p className="mt-1 truncate text-sm text-slate-500">{project.subService}</p>
+                          <h3 className="break-words text-base font-semibold text-slate-900">{project.customer}</h3>
+                          <p className="mt-1 break-words text-sm text-slate-500">{project.subService}</p>
                         </div>
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                          className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
                             isUpcoming
                               ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
                               : "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
@@ -1066,16 +1066,16 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl bg-white px-3 py-2.5">
+                        <div className="min-w-0 rounded-xl bg-white px-3 py-2.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Consultant
                           </p>
-                          <p className="mt-1 text-sm font-medium text-slate-900">{consultantName}</p>
+                          <p className="mt-1 break-words text-sm font-medium text-slate-900">{consultantName}</p>
                           <p className="mt-1 text-xs text-slate-500">
                             {project.consultantTitle !== "-" ? project.consultantTitle : "Planning Consultant"}
                           </p>
                         </div>
-                        <div className="rounded-xl bg-white px-3 py-2.5">
+                        <div className="min-w-0 rounded-xl bg-white px-3 py-2.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Project
                           </p>
@@ -1085,16 +1085,16 @@ export default function DashboardPage() {
                           </div>
                           <p className="mt-1 text-xs text-slate-500">{project.councilName}</p>
                         </div>
-                        <div className="rounded-xl bg-white px-3 py-2.5">
+                        <div className="min-w-0 rounded-xl bg-white px-3 py-2.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Date
                           </p>
-                          <div className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-900">
-                            <CalendarDays size={15} className="text-blue-600" />
-                            <span>{project.consultationDate !== "-" ? project.consultationDate : "Pending"}</span>
+                          <div className="mt-1 flex items-start gap-2 text-sm font-medium text-slate-900">
+                            <CalendarDays size={15} className="mt-0.5 shrink-0 text-blue-600" />
+                            <span className="break-words">{project.consultationDate !== "-" ? project.consultationDate : "Pending"}</span>
                           </div>
                         </div>
-                        <div className="rounded-xl bg-white px-3 py-2.5">
+                        <div className="min-w-0 rounded-xl bg-white px-3 py-2.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Time
                           </p>
@@ -1152,18 +1152,18 @@ export default function DashboardPage() {
                     <Link
                       key={project.id}
                       href={`/projects/${project.projectId}/workspace/project`}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
                     >
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-slate-900">{project.projectId}</p>
                           {project.isNew ? <NewProjectBadge /> : null}
                         </div>
-                        <p className="text-sm text-slate-500">{project.customer}</p>
+                        <p className="break-words text-sm text-slate-500">{project.customer}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="w-full text-left sm:w-auto sm:text-right">
                         <p className="text-sm font-medium text-slate-700">{project.updatedOn}</p>
-                        <p className="text-xs text-slate-500">{project.stage}</p>
+                        <p className="break-words text-xs text-slate-500">{project.stage}</p>
                       </div>
                     </Link>
                   ))
@@ -1190,7 +1190,7 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <div className="mt-5 xl:hidden">
+          <div className="mt-5 2xl:hidden">
             <div className="mb-4">
               <input
                 placeholder="Search projects, customer, council, or service..."
@@ -1304,7 +1304,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="hidden xl:block">
+          <div className="hidden 2xl:block">
             <DataTable<ProjectRow>
               data={projects}
               columns={tableColumns}
@@ -1346,13 +1346,15 @@ function HeroMetric({
   helper: string
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-      <div className="flex items-center gap-2 text-blue-100">
-        {icon}
-        <p className="text-xs font-semibold uppercase tracking-[0.18em]">{label}</p>
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+      <div className="flex items-start gap-2 text-blue-100">
+        <span className="mt-0.5 shrink-0">{icon}</span>
+        <p className="min-w-0 break-words text-[11px] font-semibold uppercase leading-5 tracking-[0.12em] sm:text-xs sm:tracking-[0.18em]">
+          {label}
+        </p>
       </div>
-      <p className="mt-3 text-3xl font-semibold text-white">{value}</p>
-      <p className="mt-1 text-sm text-slate-300">{helper}</p>
+      <p className="mt-3 break-words text-2xl font-semibold text-white sm:text-3xl">{value}</p>
+      <p className="mt-1 text-sm leading-6 text-slate-300">{helper}</p>
     </div>
   )
 }
@@ -1371,16 +1373,28 @@ function getDonutSegments(
   total: number,
   circumference: number
 ) {
+  const positiveMetrics = metrics.filter((metric) => metric.value > 0)
+
+  if (positiveMetrics.length === 0) {
+    const fallbackLength = circumference / Math.max(metrics.length, 1)
+
+    return metrics.map((metric, index) => ({
+      ...metric,
+      offset: index * fallbackLength,
+      segmentLength: fallbackLength,
+      strokeOpacity: 0.9,
+    }))
+  }
+
   let offset = 0
 
-  return metrics
-    .filter((metric) => metric.value > 0)
-    .map((metric) => {
+  return positiveMetrics.map((metric) => {
       const segmentLength = (metric.value / Math.max(total, 1)) * circumference
       const segment = {
         ...metric,
         offset,
         segmentLength,
+        strokeOpacity: 1,
       }
 
       offset += segmentLength
@@ -1405,10 +1419,10 @@ function MetricPieChart({
   const segments = getDonutSegments(metrics, total, circumference)
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[240px_1fr] lg:items-center">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:items-center">
       <div className="mx-auto">
-        <div className="relative h-56 w-56">
-          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <div className="relative h-44 w-44 sm:h-56 sm:w-56">
+          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90 overflow-visible">
             <circle cx="60" cy="60" r={radius} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
             {segments.map((metric) => (
               <circle
@@ -1421,16 +1435,17 @@ function MetricPieChart({
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${metric.segmentLength} ${circumference - metric.segmentLength}`}
                 strokeDashoffset={-metric.offset}
+                strokeOpacity={metric.strokeOpacity}
               />
             ))}
           </svg>
 
-          <div className="absolute inset-[19%] flex items-center justify-center rounded-full bg-white text-center shadow-inner">
+          <div className="absolute inset-[19%] flex items-center justify-center rounded-full bg-white px-2 text-center shadow-inner">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Tracked KPI Total
               </p>
-              <p className="mt-1 text-3xl font-semibold text-slate-900">{total}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">{total}</p>
               <p className="mt-1 text-[11px] text-slate-500">
                 Across all KPI metrics
               </p>
@@ -1438,10 +1453,10 @@ function MetricPieChart({
           </div>
         </div>
 
-        <p className="mt-2 max-w-56 text-center text-[11px] text-slate-500">The legend lists each metric&apos;s total and share of the overall KPI count.</p>
+        <p className="mt-2 max-w-56 text-center text-[11px] leading-5 text-slate-500">The legend lists each metric&apos;s total and share of the overall KPI count.</p>
       </div>
 
-      <div className="space-y-2.5">
+      <div className="min-w-0 space-y-2.5">
         {metrics.map((metric) => {
           const share = formatMetricShare(metric.value, total)
 
@@ -1450,15 +1465,15 @@ function MetricPieChart({
               key={metric.label}
               className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 transition-colors"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="mt-0.5 h-3 w-3 rounded-full" style={{ backgroundColor: metric.color }} />
-                    <p className="text-sm font-semibold text-slate-900">{metric.label}</p>
+                    <span className="mt-0.5 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: metric.color }} />
+                    <p className="break-words text-sm font-semibold text-slate-900">{metric.label}</p>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">{metric.helper}</p>
+                  <p className="mt-1 break-words text-xs leading-5 text-slate-500">{metric.helper}</p>
                 </div>
-                <div className="text-right">
+                <div className="w-full text-left sm:w-auto sm:text-right">
                   <p className="text-2xl font-semibold text-slate-900">{metric.value}</p>
                   <p className="text-xs text-slate-500">{share}% of KPI total</p>
                 </div>
@@ -1497,9 +1512,9 @@ function SubscriptionBadges({
 
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1 text-sm text-slate-800">{value}</p>
+      <p className="mt-1 break-words text-sm text-slate-800">{value}</p>
     </div>
   )
 }

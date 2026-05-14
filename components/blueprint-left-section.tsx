@@ -1,3 +1,5 @@
+import { Lightbulb } from "lucide-react"
+
 export function BlueprintLeftSection() {
   return (
     <div className="lg:col-span-7 relative bg-slate-50 dark:bg-slate-950/50 p-8 flex flex-col justify-between overflow-hidden min-h-[400px]">
@@ -30,7 +32,7 @@ export function BlueprintLeftSection() {
       <div className="relative group cursor-help w-fit">
         <div className="flex items-center gap-4 p-4 border border-primary/20 bg-white dark:bg-slate-900 rounded-lg shadow-sm">
           <div className="flex-shrink-0 size-10 rounded bg-primary/5 flex items-center justify-center text-primary">
-            <span className="material-symbols-outlined">lightbulb</span>
+            <Lightbulb size={18} />
           </div>
           <div>
             <p className="text-[10px] font-bold text-primary uppercase tracking-tighter">AI Insight #842</p>
