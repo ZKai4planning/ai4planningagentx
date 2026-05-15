@@ -1938,6 +1938,7 @@ export default function EligibilityDetailsCard({
   const [editingStepNumber, setEditingStepNumber] = useState<number | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const savedScrollYRef = useRef<number | null>(null)
 
   if (loading) {
     return (
@@ -2090,6 +2091,7 @@ export default function EligibilityDetailsCard({
     try {
       setEditSubmitting(true)
       setEditError(null)
+      savedScrollYRef.current = window.scrollY
 
       const payloadObject = buildEligibilityEditablePayload(eligibilityData)
       setPayloadValue(payloadObject, targetPath, normalizeEditableValue(row, trimmedValue))
@@ -2108,11 +2110,22 @@ export default function EligibilityDetailsCard({
         await onEligibilityUpdated()
       }
 
+      if (savedScrollYRef.current !== null) {
+        const restoreScrollY = savedScrollYRef.current
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: restoreScrollY, behavior: "auto" })
+          window.requestAnimationFrame(() => {
+            window.scrollTo({ top: restoreScrollY, behavior: "auto" })
+          })
+        })
+      }
+
       cancelEditingMissingField()
     } catch (error) {
       console.error("Failed to update eligibility field", error)
       setEditError("Unable to save this missing eligibility detail right now.")
     } finally {
+      savedScrollYRef.current = null
       setEditSubmitting(false)
     }
   }
