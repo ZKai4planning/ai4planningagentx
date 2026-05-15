@@ -2260,46 +2260,9 @@ const handleGenerateCouncilQuotation = () => {
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 ring-1 ring-slate-200">
-                      Application Missing Fields
-                    </p>
-                    <h4 className="text-sm font-bold text-slate-900">Only incomplete application fields</h4>
-                    <p className="mt-1 text-xs text-slate-500">
-                      This stage is read-only and shows only fields that are still uncompleted.
-                    </p>
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    applicationMissingFields.length === 0
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-amber-100 text-amber-800"
-                  }`}>
-                    {applicationMissingFields.length === 0
-                      ? "All application fields filled"
-                      : `${applicationMissingFields.length} fields pending`}
-                  </span>
-                </div>
-
-                {applicationMissingFields.length === 0 ? (
-                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-900">
-                    No application fields are missing in this stage.
-                  </div>
-                ) : (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {applicationMissingFields.map((field) => (
-                      <div key={field.key} className="rounded-2xl border border-rose-200 bg-white px-4 py-4">
-                        <p className="text-sm font-semibold text-slate-900">{field.label}</p>
-                        <p className="mt-1 text-xs font-semibold text-rose-700">Missing</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               {pendingDocumentsJourneyGroups.map((group) =>
                 group.items.length > 0 ? (
+                  <>
                   <div key={group.label} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                     <p className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 ring-1 ring-slate-200">
                       {group.label}
@@ -2389,8 +2352,88 @@ const handleGenerateCouncilQuotation = () => {
                       )}
                     </div>
                   </div>
+                  {group.label === "Triggers" ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 ring-1 ring-slate-200">
+                            Application Missing Fields
+                          </p>
+                          <h4 className="text-sm font-bold text-slate-900">Only incomplete application fields</h4>
+                          <p className="mt-1 text-xs text-slate-500">
+                            This stage is read-only and shows only fields that are still uncompleted.
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          applicationMissingFields.length === 0
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {applicationMissingFields.length === 0
+                            ? "All application fields filled"
+                            : `${applicationMissingFields.length} fields pending`}
+                        </span>
+                      </div>
+
+                      {applicationMissingFields.length === 0 ? (
+                        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-900">
+                          No application fields are missing in this stage.
+                        </div>
+                      ) : (
+                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {applicationMissingFields.map((field) => (
+                            <div key={field.key} className="rounded-2xl border border-rose-200 bg-white px-4 py-4">
+                              <p className="text-sm font-semibold text-slate-900">{field.label}</p>
+                              <p className="mt-1 text-xs font-semibold text-rose-700">Missing</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                  </>
                 ) : null
               )}
+
+              {!pendingDocumentsJourneyGroups.some((group) => group.label === "Triggers" && group.items.length > 0) ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 ring-1 ring-slate-200">
+                      Application Missing Fields
+                    </p>
+                    <h4 className="text-sm font-bold text-slate-900">Only incomplete application fields</h4>
+                    <p className="mt-1 text-xs text-slate-500">
+                      This stage is read-only and shows only fields that are still uncompleted.
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    applicationMissingFields.length === 0
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800"
+                  }`}>
+                    {applicationMissingFields.length === 0
+                      ? "All application fields filled"
+                      : `${applicationMissingFields.length} fields pending`}
+                  </span>
+                </div>
+
+                {applicationMissingFields.length === 0 ? (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-900">
+                    No application fields are missing in this stage.
+                  </div>
+                ) : (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {applicationMissingFields.map((field) => (
+                      <div key={field.key} className="rounded-2xl border border-rose-200 bg-white px-4 py-4">
+                        <p className="text-sm font-semibold text-slate-900">{field.label}</p>
+                        <p className="mt-1 text-xs font-semibold text-rose-700">Missing</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              ) : null}
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                   <div>
