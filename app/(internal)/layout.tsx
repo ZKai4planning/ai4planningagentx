@@ -79,7 +79,7 @@ export default function DashboardLayout({
 
             <div className="hidden min-w-0 sm:block">
               <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
-              <p className="truncate text-xs text-slate-500">{email ?? "Logged in user"}</p>
+              {email ? <p className="truncate text-xs text-slate-500">{email}</p> : null}
             </div>
 
             <div className="ml-auto flex items-center gap-3">
