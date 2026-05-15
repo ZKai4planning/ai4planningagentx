@@ -48,6 +48,7 @@ import {
   Headphones,
   History,
   Download,
+  Pencil,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
@@ -137,7 +138,12 @@ type ServiceCartData = {
 type ServiceCartResponse = {
   success?: boolean
   message?: string
-  data?: ServiceCartData
+  data?: ServiceCartData | {
+    projectId?: string
+    userId?: string
+    totalCarts?: number
+    carts?: ServiceCartData[]
+  }
 }
 
 type ServiceCartUpdatePayload = {
@@ -153,6 +159,11 @@ type AddServiceCartPayload = {
     serviceName: string
     payment: number
   }>
+}
+
+type UpdateServiceCartItemPayload = {
+  serviceName: string
+  payment: number
 }
 
 type EligibilityFieldKey = keyof typeof eligibilityFieldMappings
@@ -638,6 +649,26 @@ function mapServiceCartToQuoteServices(cart: ServiceCartData | null): QuoteServi
   }))
 }
 
+function getLatestServiceCart(data?: ServiceCartResponse["data"]): ServiceCartData | null {
+  if (!data) return null
+
+  if (Array.isArray((data as { carts?: ServiceCartData[] }).carts)) {
+    const carts = ((data as { carts?: ServiceCartData[] }).carts ?? []).filter(
+      (cart): cart is ServiceCartData => Boolean(cart?.cartId)
+    )
+
+    if (carts.length === 0) return null
+
+    return [...carts].sort((left, right) => {
+      const leftTime = new Date(left.updatedAt ?? left.createdAt ?? 0).getTime()
+      const rightTime = new Date(right.updatedAt ?? right.createdAt ?? 0).getTime()
+      return rightTime - leftTime
+    })[0] ?? null
+  }
+
+  return "cartId" in data ? data : null
+}
+
 function parsePaymentAmount(amount: string | number | null | undefined): number {
   if (!amount) return 0;
 
@@ -768,6 +799,7 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
   // Quote State
   const [quoteGenerated, setQuoteGenerated] = useState(false)
   const [quotedCartIds, setQuotedCartIds] = useState<string[]>([])
+  const [quotationsLoading, setQuotationsLoading] = useState(false)
   const [quoteHistory, setQuoteHistory] = useState<GeneratedQuote[]>([]);
   const [viewingQuote, setViewingQuote] = useState<GeneratedQuote | null>(null);
   const [viewingDocument, setViewingDocument] = useState<BriefcaseDocumentItem | null>(null)
@@ -860,9 +892,14 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
 
   const loadGeneratedQuotations = useCallback(async () => {
     if (!projectId || !resolvedProjectUserId) {
+      setQuotedCartIds([])
       setQuoteHistory([])
+      setQuoteGenerated(false)
+      setQuotationsLoading(false)
       return
     }
+
+    setQuotationsLoading(true)
 
     try {
       const response = await axiosInstance.get<GeneratedQuotationsResponse>(
@@ -906,6 +943,8 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
       setQuotedCartIds([])
       setQuoteHistory([])
       setQuoteGenerated(false)
+    } finally {
+      setQuotationsLoading(false)
     }
   }, [applicationApplicantName, projectId, resolvedProjectUserId, serviceCart?.cartId])
 
@@ -1471,13 +1510,11 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
   // Services State
   const [newServiceName, setNewServiceName] = useState("");
   const [newServiceAmount, setNewServiceAmount] = useState("");
-  const [quoteServices, setQuoteServices] = useState([
-    { id: "service-survey", title: "Measured Survey", category: "Triggers", amount: "35 GBP", about: "Site survey service to confirm property dimensions, room layout, and trigger the measured drawing workflow.", status: dimensionsCompleted ? "Ready" : "Awaiting details" },
-    { id: "service-gas", title: "Gas Safety Review", category: "Compliance", amount: "20 GBP", about: "Compliance review for the Gas Safety Certificate so the HMO submission pack can proceed with CP12 verification.", status: gasSafetyCertificate === "Yes" ? "Ready" : "Awaiting certificate" },
-    { id: "service-tree", title: "Tree / TPO Review", category: "Constraints", amount: "25 GBP", about: "Planning constraints review for nearby trees and TPO risk before finalising the planning and licensing route.", status: treesWithTPO !== "-" ? "Ready" : "Awaiting site answer" },
-    { id: "service-document-pack", title: "Document Validation Pack", category: "Documents", amount: "25 GBP", about: "Validation of ownership, tenancy, and supporting customer documents before they move into the final briefcase.", status: documentState.checklist.length > 0 ? (allRequiredDocsCompleted ? "Ready" : "In progress") : "Awaiting documents" },
-    { id: "service-drawing-pack", title: "Drawing Review Pack", category: "Drawings", amount: "35 GBP", about: "Review and coordination for location plans, site plans, elevations, and proposed drawing outputs tied to the case.", status: anyDrawingAvailable ? "Ready" : "Awaiting drawings" },
-  ]);
+  const [quoteServices, setQuoteServices] = useState<QuoteService[]>([]);
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null)
+  const [editServiceName, setEditServiceName] = useState("")
+  const [editServiceAmount, setEditServiceAmount] = useState("")
+  const [editServiceSubmitting, setEditServiceSubmitting] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -1506,7 +1543,7 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
 
         if (!active) return
 
-        const nextCart = response.data.data ?? null
+        const nextCart = getLatestServiceCart(response.data.data)
         setServiceCart(nextCart)
         setQuoteServices(mapServiceCartToQuoteServices(nextCart))
       } catch (error) {
@@ -1587,7 +1624,7 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
             }
           )
 
-          nextCart = response.data.data ?? null
+          nextCart = getLatestServiceCart(response.data.data)
         }
 
         setServiceCart(nextCart)
@@ -1611,6 +1648,85 @@ const [councilFeeSubmitted, setCouncilFeeSubmitted] = useState(false)
   };
   
   const handleDeleteService = (id: string) => { setQuoteServices((prev) => prev.filter((service) => service.id !== id)); };
+
+  const handleStartEditService = (service: QuoteService) => {
+    setEditingServiceId(service.id)
+    setEditServiceName(service.title)
+    setEditServiceAmount(String(parsePaymentAmount(service.amount)))
+    setAddServiceError(null)
+  }
+
+  const handleCancelEditService = () => {
+    setEditingServiceId(null)
+    setEditServiceName("")
+    setEditServiceAmount("")
+    setAddServiceError(null)
+  }
+
+  const handleSaveEditService = (id: string) => {
+    const serviceName = editServiceName.trim()
+    const payment = Number(editServiceAmount)
+
+    if (!serviceName || !Number.isFinite(payment) || payment <= 0 || !projectId) {
+      setAddServiceError("Enter a valid service name and amount before saving.")
+      return
+    }
+
+    const saveEdit = async () => {
+      setEditServiceSubmitting(true)
+      setAddServiceError(null)
+
+      const nextQuoteServices = quoteServices.map((service) =>
+        service.id === id
+          ? {
+              ...service,
+              title: serviceName,
+              amount: formatPaymentAmount(payment),
+            }
+          : service
+      )
+
+      try {
+        const updateServicePayload: UpdateServiceCartItemPayload = {
+          serviceName,
+          payment,
+        }
+
+        await axiosInstance.put(
+          `/service-cart/${encodeURIComponent(id)}`,
+          updateServicePayload
+        )
+
+        const refreshedCartResponse = await axiosInstance.get<ServiceCartResponse>(
+          `/service-cart/${encodeURIComponent(projectId)}`,
+          {
+            params: {
+              projectId,
+              userId: resolvedProjectUserId,
+            },
+          }
+        )
+
+        const nextCart = getLatestServiceCart(refreshedCartResponse.data.data)
+
+        if (nextCart) {
+          setServiceCart(nextCart)
+          setQuoteServices(mapServiceCartToQuoteServices(nextCart))
+        } else {
+          setQuoteServices(nextQuoteServices)
+        }
+
+        handleCancelEditService()
+      } catch (error) {
+        setAddServiceError("Unable to update this service right now.")
+        console.error("Failed to edit service in cart", error)
+      } finally {
+        setEditServiceSubmitting(false)
+      }
+    }
+
+    void saveEdit()
+  }
 
   const generateInvoicePDF = (quoteData?: GeneratedQuote | null) => {
     const doc = new jsPDF();
@@ -3065,7 +3181,7 @@ const handleGenerateCouncilQuotation = () => {
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${quoteGenerated ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{quoteStatusLabel}</span>
                   </div>
-                  {cartLoading ? (
+                  {cartLoading || quotationsLoading ? (
                     <p className="text-sm text-slate-500">Loading payment-stage services...</p>
                   ) : cartError ? (
                     <p className="text-sm text-rose-600">{cartError}</p>
@@ -3077,7 +3193,7 @@ const handleGenerateCouncilQuotation = () => {
                 </div>
 
                 <div className="space-y-3 mb-6">
-                  {quoteServices.length === 0 && !cartLoading ? (
+                  {quoteServices.length === 0 && !cartLoading && !quotationsLoading ? (
                     <div className="rounded-xl border border-dashed bg-slate-50 px-4 py-6 text-sm text-slate-500">
                       {quoteGenerated
                         ? "Quote already generated. Add new services below to create the next cart."
@@ -3087,16 +3203,69 @@ const handleGenerateCouncilQuotation = () => {
                     <div key={service.id} className="rounded-xl border bg-slate-50 px-4 py-4">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{service.title}</p>
-                            <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 border">{service.category}</span>
-                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${service.status === "Ready" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{service.status}</span>
-                          </div>
-                          <p className="mt-2 text-sm leading-6 text-slate-600">{service.about}</p>
+                          {editingServiceId === service.id ? (
+                            <div className="space-y-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 border">{service.category}</span>
+                                <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${service.status === "Ready" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{service.status}</span>
+                              </div>
+                              <input
+                                type="text"
+                                value={editServiceName}
+                                onChange={(e) => setEditServiceName(e.target.value)}
+                                className="w-full rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-200"
+                              />
+                              <p className="text-sm leading-6 text-slate-600">{service.about}</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-slate-900">{service.title}</p>
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 border">{service.category}</span>
+                                <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${service.status === "Ready" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{service.status}</span>
+                              </div>
+                              <p className="mt-2 text-sm leading-6 text-slate-600">{service.about}</p>
+                            </>
+                          )}
                         </div>
                         <div className="flex items-start gap-3">
-                          <div className="text-right"><p className="text-[11px] uppercase text-slate-400">Amount</p><p className="text-base font-bold text-slate-900">{service.amount}</p></div>
-                          <button type="button" onClick={() => handleDeleteService(service.id)} className="p-2 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"><Trash2 size={16} /></button>
+                          {editingServiceId === service.id ? (
+                            <>
+                              <div className="text-right">
+                                <p className="text-[11px] uppercase text-slate-400">Amount</p>
+                                <input
+                                  type="number"
+                                  value={editServiceAmount}
+                                  onChange={(e) => setEditServiceAmount(e.target.value)}
+                                  className="mt-1 w-28 rounded-lg border bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-200"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditService(service.id)}
+                                  disabled={editServiceSubmitting}
+                                  className={`rounded-md px-3 py-2 text-xs font-semibold transition ${editServiceSubmitting ? "cursor-not-allowed bg-blue-200 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                                >
+                                  {editServiceSubmitting ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditService}
+                                  disabled={editServiceSubmitting}
+                                  className="rounded-md border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-right"><p className="text-[11px] uppercase text-slate-400">Amount</p><p className="text-base font-bold text-slate-900">{service.amount}</p></div>
+                              <button type="button" onClick={() => handleStartEditService(service)} className="p-2 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"><Pencil size={16} /></button>
+                              <button type="button" onClick={() => handleDeleteService(service.id)} className="p-2 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"><Trash2 size={16} /></button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
