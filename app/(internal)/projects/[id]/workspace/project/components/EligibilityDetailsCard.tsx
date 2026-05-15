@@ -1,6 +1,7 @@
 "use client"
 
 import { type RefObject, useRef, useState } from "react"
+import axiosInstance from "@/lib/axiosinstance"
 import {
   AlertTriangle,
   Bot,
@@ -17,6 +18,7 @@ import {
   Shield,
 } from "lucide-react"
 import {
+  type EligibilityFieldMode,
   eligibilityFieldMappings,
   eligibilityResourceMappings,
   getEligibilityApplicantName,
@@ -124,6 +126,8 @@ type BuiltBundleItem = {
 }
 
 type BuiltQuestionRow = {
+  fieldKey?: EligibilityFieldKey
+  fieldMode?: EligibilityFieldMode
   number: number
   label: string
   kind: QuestionKind
@@ -143,6 +147,7 @@ type EligibilityDetailsCardProps = {
   loading: boolean
   projectId?: string
   projectServiceName?: string
+  onEligibilityUpdated?: () => Promise<void> | void
   viewMode?: "checklist" | "eligibility"
 }
 
@@ -1916,6 +1921,7 @@ export default function EligibilityDetailsCard({
   loading,
   projectId,
   projectServiceName,
+  onEligibilityUpdated,
   viewMode = "eligibility",
 }: EligibilityDetailsCardProps) {
   const agentZPanelRef = useRef<HTMLDivElement | null>(null)
@@ -1927,6 +1933,11 @@ export default function EligibilityDetailsCard({
   const [agentZSelection, setAgentZSelection] = useState<AgentZKey | "general">(
     "general"
   )
+  const [editingFieldKey, setEditingFieldKey] = useState<EligibilityFieldKey | null>(null)
+  const [editingValue, setEditingValue] = useState("")
+  const [editingStepNumber, setEditingStepNumber] = useState<number | null>(null)
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   if (loading) {
     return (
@@ -2043,6 +2054,69 @@ export default function EligibilityDetailsCard({
     })
   }
 
+  const startEditingMissingField = (row: BuiltQuestionRow, stepNumber: number) => {
+    if (!row.fieldKey) return
+
+    setEditingFieldKey(row.fieldKey)
+    setEditingValue("")
+    setEditingStepNumber(stepNumber)
+    setEditError(null)
+  }
+
+  const cancelEditingMissingField = () => {
+    setEditingFieldKey(null)
+    setEditingValue("")
+    setEditingStepNumber(null)
+    setEditError(null)
+  }
+
+  const saveMissingField = async (row: BuiltQuestionRow) => {
+    if (!eligibilityData || !row.fieldKey || !editingStepNumber) return
+
+    const trimmedValue = editingValue.trim()
+    if (!trimmedValue) {
+      setEditError("Enter a value before saving this eligibility answer.")
+      return
+    }
+
+    const mapping = eligibilityFieldMappings[row.fieldKey]
+    const targetPath = mapping.paths[0]
+
+    if (!targetPath) {
+      setEditError("This eligibility field does not have a writable payload path yet.")
+      return
+    }
+
+    try {
+      setEditSubmitting(true)
+      setEditError(null)
+
+      const payloadObject = buildEligibilityEditablePayload(eligibilityData)
+      setPayloadValue(payloadObject, targetPath, normalizeEditableValue(row, trimmedValue))
+
+      const formData = new FormData()
+      formData.append("currentStep", String(editingStepNumber))
+      formData.append("status", eligibilityData.status)
+      formData.append("payload", JSON.stringify(payloadObject))
+
+      await axiosInstance.put(
+        `/eligibility/${encodeURIComponent(projectId ?? eligibilityData.projectId)}`,
+        formData
+      )
+
+      if (onEligibilityUpdated) {
+        await onEligibilityUpdated()
+      }
+
+      cancelEditingMissingField()
+    } catch (error) {
+      console.error("Failed to update eligibility field", error)
+      setEditError("Unable to save this missing eligibility detail right now.")
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.35)]">
@@ -2126,7 +2200,7 @@ export default function EligibilityDetailsCard({
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_380px]">
         <div className="space-y-4">
           <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.55)] sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Review Flow
@@ -2140,7 +2214,7 @@ export default function EligibilityDetailsCard({
                 </p>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 md:grid-cols-2 xl:min-w-[420px] xl:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                     Rows shown
@@ -2165,7 +2239,7 @@ export default function EligibilityDetailsCard({
                     {totalIncompleteRows}/{totalRows} ({incompletePercent}%)
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 md:col-span-2 xl:col-span-3">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
                     Project {projectId ?? eligibilityData.projectId}
                   </span>
@@ -2187,7 +2261,7 @@ export default function EligibilityDetailsCard({
               </div>
             </div>
 
-              <div className="mt-5 grid gap-2 lg:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-5 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                 {stepSummaries.map((step) => {
                 const completionStep = eligibilityData.completionStatus.steps.find(
                   (entry) => entry.step === step.number
@@ -2195,7 +2269,8 @@ export default function EligibilityDetailsCard({
                 const statusLabel = getStepStatusLabel(
                   eligibilityData.currentStep,
                   step.number,
-                  Boolean(completionStep?.completed)
+                  Boolean(completionStep?.completed),
+                  step.incompleteCount
                 )
                 const completionPercent = getCompletionPercent(step.answeredCount, step.totalCount)
 
@@ -2259,7 +2334,8 @@ export default function EligibilityDetailsCard({
               const statusLabel = getStepStatusLabel(
                 eligibilityData.currentStep,
                 step.number,
-                Boolean(completionStep?.completed)
+                Boolean(completionStep?.completed),
+                step.incompleteCount
               )
               const toneClasses = getToneClasses(step.tone)
               const completionPercent = getCompletionPercent(step.answeredCount, step.totalCount)
@@ -2412,7 +2488,16 @@ export default function EligibilityDetailsCard({
                                   <QuestionRow
                                     key={`${section.title}-${row.number}`}
                                     row={row}
+                                    stepNumber={step.number}
                                     active={row.agentZKey === agentZSelection}
+                                    isEditing={editingFieldKey === row.fieldKey}
+                                    editingValue={editingFieldKey === row.fieldKey ? editingValue : ""}
+                                    editError={editingFieldKey === row.fieldKey ? editError : null}
+                                    editSubmitting={editingFieldKey === row.fieldKey && editSubmitting}
+                                    onStartEdit={() => startEditingMissingField(row, step.number)}
+                                    onChangeEditingValue={setEditingValue}
+                                    onCancelEdit={cancelEditingMissingField}
+                                    onSaveEdit={() => void saveMissingField(row)}
                                     onOpenAgentZ={(key) => openAgentZWorkspace(key)}
                                   />
                                 ))}
@@ -2605,8 +2690,14 @@ function getToneClasses(tone: Tone) {
   }
 }
 
-function getStepStatusLabel(currentStep: number, stepNumber: number, completed: boolean) {
-  if (completed) return "Completed"
+function getStepStatusLabel(
+  currentStep: number,
+  stepNumber: number,
+  completed: boolean,
+  incompleteCount: number
+) {
+  if (completed && incompleteCount === 0) return "Completed"
+  if (incompleteCount > 0) return stepNumber < currentStep ? "In Progress" : "Pending"
   if (currentStep === stepNumber) return "Current"
   return stepNumber < currentStep ? "Reviewed" : "Pending"
 }
@@ -2771,6 +2862,8 @@ function buildDetailedQuestionRow(
     const value = summarizeResourceValue(raw, resourceLinks)
 
     return {
+      fieldKey: undefined,
+      fieldMode: undefined,
       number: question.number,
       label: question.label,
       kind,
@@ -2813,6 +2906,8 @@ function buildDetailedQuestionRow(
     const answeredCount = bundleItems.filter((item) => item.answered).length
 
     return {
+      fieldKey: undefined,
+      fieldMode: undefined,
       number: question.number,
       label: question.label,
       kind,
@@ -2832,6 +2927,8 @@ function buildDetailedQuestionRow(
     const value = getDigitalSignatureValue(eligibility)
 
     return {
+      fieldKey: undefined,
+      fieldMode: undefined,
       number: question.number,
       label: question.label,
       kind,
@@ -2855,6 +2952,8 @@ function buildDetailedQuestionRow(
     : "-"
 
   return {
+    fieldKey: question.fieldKey,
+    fieldMode: question.fieldKey ? eligibilityFieldMappings[question.fieldKey].mode : undefined,
     number: question.number,
     label: question.label,
     kind,
@@ -2868,6 +2967,104 @@ function buildDetailedQuestionRow(
     agentZLabel: question.agentZLabel,
     agentZSelected: question.agentZ ? hasAgentZSelection(value) : false,
   }
+}
+
+const NUMERIC_FIELD_KEYS = new Set<EligibilityFieldKey>([
+  "currentOccupantsCount",
+  "plannedOccupantsCount",
+  "availableBedroomsCount",
+  "bathroomsOrShowerRoomsCount",
+  "existingPropertyWidthM",
+  "existingPropertyDepthM",
+  "proposedExtensionWidthM",
+  "proposedExtensionDepthM",
+  "ridgeOrEavesHeightM",
+  "distanceFromBoundaryM",
+  "kitchenRoomLengthM",
+  "kitchenRoomWidthM",
+  "bathroomRoomLengthM",
+  "bathroomRoomWidthM",
+  "numberOfFloors",
+  "totalInternalFloorArea",
+])
+
+function isEditableMissingField(row: BuiltQuestionRow) {
+  return !row.answered && Boolean(row.fieldKey) && row.kind !== "resource" && row.kind !== "bundle" && row.kind !== "signature"
+}
+
+function usesMultilineEditor(row: BuiltQuestionRow) {
+  return row.kind === "block"
+}
+
+function usesBooleanEditor(row: BuiltQuestionRow) {
+  if (row.kind === "declaration") return true
+
+  const label = row.label.trim().toLowerCase()
+  return (
+    label.startsWith("is ") ||
+    label.startsWith("are ") ||
+    label.startsWith("has ") ||
+    label.startsWith("have ") ||
+    label.startsWith("will ") ||
+    label.startsWith("do ") ||
+    label.startsWith("does ") ||
+    label.startsWith("was ") ||
+    label.startsWith("were ") ||
+    label.endsWith("?")
+  )
+}
+
+function normalizeEditableValue(row: BuiltQuestionRow, value: string): string | number | boolean | string[] {
+  const trimmed = value.trim()
+
+  if (row.fieldMode === "array") {
+    return trimmed
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  if (usesBooleanEditor(row)) {
+    return trimmed.toLowerCase() === "yes"
+  }
+
+  if (row.fieldKey && NUMERIC_FIELD_KEYS.has(row.fieldKey)) {
+    const numericValue = Number(trimmed)
+    return Number.isFinite(numericValue) ? numericValue : trimmed
+  }
+
+  return trimmed
+}
+
+function buildEligibilityEditablePayload(eligibility: EligibilityData) {
+  const clone = JSON.parse(JSON.stringify(eligibility)) as Record<string, unknown>
+
+  delete clone._id
+  delete clone.projectId
+  delete clone.status
+  delete clone.currentStep
+  delete clone.createdAt
+  delete clone.updatedAt
+  delete clone.completionStatus
+
+  return clone
+}
+
+function setPayloadValue(target: Record<string, unknown>, path: readonly string[], value: unknown) {
+  let current: Record<string, unknown> = target
+
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const key = path[index]
+    const nextValue = current[key]
+
+    if (!nextValue || typeof nextValue !== "object" || Array.isArray(nextValue)) {
+      current[key] = {}
+    }
+
+    current = current[key] as Record<string, unknown>
+  }
+
+  current[path[path.length - 1]] = value
 }
 
 function hasAgentZSelection(value: string) {
@@ -3100,15 +3297,34 @@ function SummaryItem({
 
 function QuestionRow({
   row,
+  stepNumber,
   active,
+  isEditing,
+  editingValue,
+  editError,
+  editSubmitting,
+  onStartEdit,
+  onChangeEditingValue,
+  onCancelEdit,
+  onSaveEdit,
   onOpenAgentZ,
 }: {
   row: BuiltQuestionRow
+  stepNumber: number
   active: boolean
+  isEditing: boolean
+  editingValue: string
+  editError: string | null
+  editSubmitting: boolean
+  onStartEdit: () => void
+  onChangeEditingValue: (value: string) => void
+  onCancelEdit: () => void
+  onSaveEdit: () => void
   onOpenAgentZ: (fieldKey: AgentZKey | "general") => void
 }) {
   const isBooleanValue = row.value === "Yes" || row.value === "No"
   const isIncomplete = !row.answered
+  const canEditMissingField = isEditableMissingField(row)
   const playbookEntry = row.agentZKey ? AGENT_Z_PLAYBOOK[row.agentZKey] ?? null : null
   const showUploadAgentHelp = row.kind === "resource" && !row.answered && Boolean(row.agentZKey)
   const containerClasses = active
@@ -3185,9 +3401,92 @@ function QuestionRow({
             ) : null}
           </div>
         ) : null}
+
+        {canEditMissingField ? (
+          <div className="flex flex-wrap items-center gap-2 self-start">
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={onStartEdit}
+                className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+              >
+                Respond
+              </button>
+            ) : (
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">
+                Editing step {stepNumber}
+              </span>
+            )}
+          </div>
+        ) : null}
       </div>
 
-      {row.kind === "block" ? (
+      {isEditing ? (
+        <div className="mt-3 space-y-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-3">
+          {usesBooleanEditor(row) ? (
+            <select
+              value={editingValue}
+              onChange={(event) => onChangeEditingValue(event.target.value)}
+              className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-200"
+            >
+              <option value="">Select an answer</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          ) : usesMultilineEditor(row) ? (
+            <textarea
+              value={editingValue}
+              onChange={(event) => onChangeEditingValue(event.target.value)}
+              rows={4}
+              placeholder={`Enter the missing answer for ${row.label.toLowerCase()}`}
+              className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          ) : (
+            <input
+              type={row.fieldKey && NUMERIC_FIELD_KEYS.has(row.fieldKey) ? "number" : "text"}
+              value={editingValue}
+              onChange={(event) => onChangeEditingValue(event.target.value)}
+              placeholder={
+                row.fieldMode === "array"
+                  ? "Enter comma-separated values"
+                  : `Enter the missing answer for ${row.label.toLowerCase()}`
+              }
+              className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onSaveEdit}
+              disabled={editSubmitting}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                editSubmitting
+                  ? "cursor-not-allowed bg-blue-200 text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {editSubmitting ? "Saving..." : "Save missing detail"}
+            </button>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              disabled={editSubmitting}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+          </div>
+          {editError ? (
+            <p className="text-xs font-semibold text-rose-700">{editError}</p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              This updates the eligibility form using the current step payload.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {row.kind === "block" && !isEditing ? (
         <div className={`mt-3 ${panelClasses}`}>
           <p className={`whitespace-pre-wrap break-words text-sm leading-6 ${isIncomplete ? "text-rose-900" : "text-slate-700"}`}>
             {row.answered ? row.value : "Answer missing"}
@@ -3195,7 +3494,7 @@ function QuestionRow({
         </div>
       ) : null}
 
-      {row.kind === "default" ? (
+      {row.kind === "default" && !isEditing ? (
         <div className="mt-3">
           {isBooleanValue ? (
             <span
@@ -3326,7 +3625,7 @@ function QuestionRow({
         </div>
       ) : null}
 
-      {row.kind === "declaration" ? (
+      {row.kind === "declaration" && !isEditing ? (
         <div className={`mt-3 flex items-start gap-3 ${panelClasses}`}>
           <div
             className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border ${
@@ -3460,8 +3759,8 @@ function AgentZWorkspacePanel({
   ]
 
   return (
-    <aside ref={panelRef} className="xl:sticky xl:top-6">
-      <div className="flex max-h-[80vh] flex-col overflow-x-hidden overflow-y-auto rounded-[28px] border border-slate-900/10 bg-slate-950 text-white shadow-[0_24px_60px_-34px_rgba(15,23,42,0.85)] xl:max-h-[calc(100vh-3rem)]">
+    <aside ref={panelRef} className="relative xl:sticky xl:top-6 xl:self-start">
+      <div className="flex h-fit flex-col overflow-hidden rounded-[28px] border border-slate-900/10 bg-slate-950 text-white shadow-[0_24px_60px_-34px_rgba(15,23,42,0.85)]">
         <div className="shrink-0 bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 px-5 py-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
