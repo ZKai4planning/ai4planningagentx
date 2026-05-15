@@ -2097,7 +2097,7 @@ export default function EligibilityDetailsCard({
       setPayloadValue(payloadObject, targetPath, normalizeEditableValue(row, trimmedValue))
 
       const formData = new FormData()
-      formData.append("currentStep", String(editingStepNumber))
+      formData.append("currentStep", String(eligibilityData.currentStep))
       formData.append("status", eligibilityData.status)
       formData.append("payload", JSON.stringify(payloadObject))
 
@@ -3001,6 +3001,39 @@ const NUMERIC_FIELD_KEYS = new Set<EligibilityFieldKey>([
   "totalInternalFloorArea",
 ])
 
+const BOOLEAN_EDITOR_FIELD_KEYS = new Set<EligibilityFieldKey>([
+  "useAlternateCorrespondenceAddress",
+  "usesPlanningAgent",
+  "hasPreviousCouncilApplication",
+  "previouslyExtended",
+  "sharedKitchenBathroom",
+  "roomsRentedIndividually",
+  "hasCommunalKitchen",
+  "loungeDiningRoomAsBedroom",
+  "materialsMatchExisting",
+  "nearConservationAreaOrListedBuilding",
+  "isListedBuilding",
+  "isInConservationArea",
+  "newOrAlteredAccess",
+  "cycleStorageProvisions",
+  "treesWithTPO",
+  "treesWithinFallingDistance",
+  "isSiteInFloodRiskArea",
+  "isSiteContaminatedLand",
+  "soughtPreAppAdvice",
+  "smokeAlarmsInstalled",
+  "gasSafetyCertificate",
+  "electricalReportEicr",
+  "epcAvailable",
+  "renewableEnergyProposals",
+  "communityConsultation",
+  "informationAccurate",
+  "authorityConfirmed",
+  "privateRightsAcknowledged",
+  "publicDataConsent",
+  "feeAgreementAccepted",
+])
+
 function isEditableMissingField(row: BuiltQuestionRow) {
   return !row.answered && Boolean(row.fieldKey) && row.kind !== "resource" && row.kind !== "bundle" && row.kind !== "signature"
 }
@@ -3011,20 +3044,7 @@ function usesMultilineEditor(row: BuiltQuestionRow) {
 
 function usesBooleanEditor(row: BuiltQuestionRow) {
   if (row.kind === "declaration") return true
-
-  const label = row.label.trim().toLowerCase()
-  return (
-    label.startsWith("is ") ||
-    label.startsWith("are ") ||
-    label.startsWith("has ") ||
-    label.startsWith("have ") ||
-    label.startsWith("will ") ||
-    label.startsWith("do ") ||
-    label.startsWith("does ") ||
-    label.startsWith("was ") ||
-    label.startsWith("were ") ||
-    label.endsWith("?")
-  )
+  return Boolean(row.fieldKey && BOOLEAN_EDITOR_FIELD_KEYS.has(row.fieldKey))
 }
 
 function normalizeEditableValue(row: BuiltQuestionRow, value: string): string | number | boolean | string[] {
